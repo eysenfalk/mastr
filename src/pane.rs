@@ -29,6 +29,7 @@ mod cursor;
 mod input;
 mod kitty_keyboard;
 mod osc;
+mod raw_stream;
 mod state;
 mod terminal;
 mod xtgettcap;
@@ -40,6 +41,7 @@ use self::agent_detection::{
     DetectionScreenReadInput, PendingIdleConfirmation, ScreenDetectionPublishInput,
     AGENT_PENDING_IDLE_RECHECK, AGENT_STARTUP_GRACE_WINDOW,
 };
+pub(crate) use self::raw_stream::{RawPtyAttachPlan, RawPtyStream, RawPtySubscription};
 #[cfg(any(unix, test))]
 pub use self::terminal::InputState;
 use self::terminal::{GhosttyPaneTerminal, PaneTerminal};
@@ -55,6 +57,138 @@ pub use self::{
 const RELEASE_REACQUIRE_SUPPRESSION: std::time::Duration = std::time::Duration::from_secs(1);
 const PANE_TERM: &str = "xterm-256color";
 const PANE_COLORTERM: &str = "truecolor";
+const MAX_RAW_PTY_SNAPSHOT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_RAW_PTY_SNAPSHOT_LINES: usize = 16 * 1024;
+
+fn append_raw_pty_cursor_state(out: &mut Vec<u8>, cursor: TerminalCursorState) {
+    out.extend_from_slice(if cursor.visible {
+        b"\x1b[?25h"
+    } else {
+        b"\x1b[?25l"
+    });
+    out.extend_from_slice(
+        format!(
+            "\x1b[{};{}H\x1b[{} q",
+            cursor.y + 1,
+            cursor.x + 1,
+            cursor.shape
+        )
+        .as_bytes(),
+    );
+}
+
+fn bounded_raw_pty_primary_history(terminal: &PaneTerminal) -> Vec<u8> {
+    let mut lines = MAX_RAW_PTY_SNAPSHOT_LINES;
+    while lines > 0 {
+        let snapshot = terminal.recent_unwrapped_ansi_snapshot(lines);
+        if snapshot.text.len() <= MAX_RAW_PTY_SNAPSHOT_BYTES / 2 {
+            return snapshot.text.into_bytes();
+        }
+        lines /= 2;
+    }
+    Vec::new()
+}
+
+fn raw_pty_snapshot_ansi_for_terminal(
+    terminal: &PaneTerminal,
+    cached_primary: Option<&[u8]>,
+) -> Vec<u8> {
+    let alternate = terminal.alternate_screen_active();
+    let mut bytes = b"\x1bc\x1b[?1049l".to_vec();
+    if alternate {
+        if let Some(primary) = cached_primary {
+            bytes.extend_from_slice(primary);
+        }
+        bytes.extend_from_slice(b"\x1b[?1049h");
+        bytes.extend_from_slice(terminal.visible_ansi().as_bytes());
+    } else {
+        bytes.extend_from_slice(&bounded_raw_pty_primary_history(terminal));
+    }
+    if let Some(title) = terminal
+        .terminal_title()
+        .and_then(|title| crate::config::sanitize_window_title_text(&title))
+    {
+        bytes.extend_from_slice(b"\x1b]0;");
+        bytes.extend_from_slice(title.as_bytes());
+        bytes.push(0x07);
+    }
+    #[cfg(any(unix, test))]
+    if let Some(input) = terminal.input_state() {
+        append_raw_pty_input_modes(&mut bytes, input);
+    }
+    #[cfg(unix)]
+    if let Some(keyboard) = terminal.kitty_keyboard_state_ansi() {
+        bytes.extend_from_slice(keyboard.as_bytes());
+    }
+    if let Some(cursor) = terminal.cursor_state() {
+        append_raw_pty_cursor_state(&mut bytes, cursor);
+    }
+    if bytes.len() <= MAX_RAW_PTY_SNAPSHOT_BYTES {
+        return bytes;
+    }
+
+    // Never hand the transport an oversized frame. Pathological terminal
+    // geometry can exceed the bounded snapshot budget; preserve active-screen
+    // and cursor state rather than silently wedging the raw stream pump.
+    let mut fallback = b"\x1bc\x1b[?1049l".to_vec();
+    if alternate {
+        fallback.extend_from_slice(b"\x1b[?1049h");
+    }
+    #[cfg(any(unix, test))]
+    if let Some(input) = terminal.input_state() {
+        append_raw_pty_input_modes(&mut fallback, input);
+    }
+    #[cfg(unix)]
+    if let Some(keyboard) = terminal.kitty_keyboard_state_ansi() {
+        fallback.extend_from_slice(keyboard.as_bytes());
+    }
+    if let Some(cursor) = terminal.cursor_state() {
+        append_raw_pty_cursor_state(&mut fallback, cursor);
+    }
+    fallback
+}
+
+#[cfg(any(unix, test))]
+fn append_raw_pty_input_modes(out: &mut Vec<u8>, state: InputState) {
+    use crate::input::{MouseProtocolEncoding, MouseProtocolMode};
+    if state.application_cursor {
+        out.extend_from_slice(b"\x1b[?1h");
+    }
+    if state.bracketed_paste {
+        out.extend_from_slice(b"\x1b[?2004h");
+    }
+    if state.focus_reporting {
+        out.extend_from_slice(b"\x1b[?1004h");
+    }
+    let mouse_mode = match state.mouse_protocol_mode {
+        MouseProtocolMode::None => None,
+        MouseProtocolMode::Press => Some(9),
+        MouseProtocolMode::PressRelease => Some(1000),
+        MouseProtocolMode::ButtonMotion => Some(1002),
+        MouseProtocolMode::AnyMotion => Some(1003),
+    };
+    if let Some(mode) = mouse_mode {
+        out.extend_from_slice(format!("\x1b[?{mode}h").as_bytes());
+    }
+    let mouse_encoding = match state.mouse_protocol_encoding {
+        MouseProtocolEncoding::Default => None,
+        MouseProtocolEncoding::Utf8 => Some(1005),
+        MouseProtocolEncoding::Sgr => Some(1006),
+        MouseProtocolEncoding::SgrPixels => Some(1016),
+    };
+    if let Some(encoding) = mouse_encoding {
+        out.extend_from_slice(format!("\x1b[?{encoding}h").as_bytes());
+    }
+    if state.mouse_alternate_scroll {
+        out.extend_from_slice(b"\x1b[?1007h");
+    }
+    if state.modify_other_keys {
+        out.extend_from_slice(b"\x1b[>4;1m");
+    }
+    if state.color_scheme_reporting {
+        out.extend_from_slice(b"\x1b[?2031h");
+    }
+}
 
 #[cfg(test)]
 thread_local! {
@@ -1046,6 +1180,7 @@ impl AgentDetectionPresence {
 pub struct PaneRuntime {
     pane_id: PaneId,
     terminal: Arc<PaneTerminal>,
+    raw_pty_stream: RawPtyStream,
     io: PaneRuntimeIo,
     current_size: Cell<(u16, u16, u32, u32)>,
     child_pid: Arc<AtomicU32>,
@@ -1922,6 +2057,7 @@ impl PaneRuntime {
             pane_terminal.seed_history_ansi(ansi);
         }
         let terminal = Arc::new(PaneTerminal::new(pane_terminal));
+        let raw_pty_stream = RawPtyStream::new();
         let child_pid = Arc::new(AtomicU32::new(child_pid));
         let reported_cwd = Arc::new(Mutex::new(None));
         let kitty_keyboard_flags = Arc::new(AtomicU16::new(keyboard_protocol_flags));
@@ -1930,6 +2066,7 @@ impl PaneRuntime {
 
         let io = {
             let terminal = terminal.clone();
+            let raw_pty_stream_for_read = raw_pty_stream.clone();
             let response_writer = response_tx.clone();
             let render_notify = render_notify.clone();
             let render_dirty = render_dirty.clone();
@@ -1943,8 +2080,12 @@ impl PaneRuntime {
             let on_read = Box::new(move |bytes: &[u8]| {
                 content_seq.fetch_add(1, Ordering::AcqRel);
                 let shell_pid = child_pid.load(Ordering::Acquire);
-                let result =
-                    terminal.process_pty_bytes(pane_id, shell_pid, bytes, &response_writer);
+                let primary_snapshot = (!terminal.alternate_screen_active()
+                    && raw_pty_stream_for_read.entering_alternate_screen(bytes))
+                .then(|| raw_pty_snapshot_ansi_for_terminal(&terminal, None));
+                let result = raw_pty_stream_for_read.process_read(bytes, primary_snapshot, || {
+                    terminal.process_pty_bytes(pane_id, shell_pid, bytes, &response_writer)
+                });
                 content_seq.fetch_add(1, Ordering::Release);
                 publish_terminal_bells(pane_id, result.terminal_bells, &read_events);
                 observe_detection_content_change(bytes, &detection_content_seq);
@@ -2007,6 +2148,7 @@ impl PaneRuntime {
         Ok(Self {
             pane_id,
             terminal,
+            raw_pty_stream,
             io,
             current_size: Cell::new((rows, cols, cell_width_px, cell_height_px)),
             child_pid,
@@ -2060,6 +2202,7 @@ impl PaneRuntime {
             pane_terminal.seed_history_ansi(ansi);
         }
         let terminal = Arc::new(PaneTerminal::new(pane_terminal));
+        let raw_pty_stream = RawPtyStream::new();
         let kitty_keyboard_flags = Arc::new(AtomicU16::new(0));
 
         let spawned = crate::pty::backend::spawn_with_portable_pty(rows, cols, cmd)
@@ -2100,6 +2243,7 @@ impl PaneRuntime {
 
         let io = {
             let terminal = terminal.clone();
+            let raw_pty_stream_for_read = raw_pty_stream.clone();
             let response_writer = response_tx.clone();
             let render_notify = render_notify.clone();
             let render_dirty = render_dirty.clone();
@@ -2112,8 +2256,12 @@ impl PaneRuntime {
             let on_read = Box::new(move |bytes: &[u8]| {
                 content_seq.fetch_add(1, Ordering::AcqRel);
                 let shell_pid = child_pid.load(Ordering::Acquire);
-                let result =
-                    terminal.process_pty_bytes(pane_id, shell_pid, bytes, &response_writer);
+                let primary_snapshot = (!terminal.alternate_screen_active()
+                    && raw_pty_stream_for_read.entering_alternate_screen(bytes))
+                .then(|| raw_pty_snapshot_ansi_for_terminal(&terminal, None));
+                let result = raw_pty_stream_for_read.process_read(bytes, primary_snapshot, || {
+                    terminal.process_pty_bytes(pane_id, shell_pid, bytes, &response_writer)
+                });
                 content_seq.fetch_add(1, Ordering::Release);
                 publish_terminal_bells(pane_id, result.terminal_bells, &events);
                 if agent_detection == AgentDetection::Enabled {
@@ -2563,6 +2711,7 @@ impl PaneRuntime {
         Ok(Self {
             pane_id,
             terminal,
+            raw_pty_stream,
             io,
             current_size: Cell::new((rows, cols, 0, 0)),
             child_pid,
@@ -2763,6 +2912,16 @@ impl PaneRuntime {
 
     pub fn visible_ansi(&self) -> String {
         self.terminal.visible_ansi()
+    }
+
+    pub(crate) fn raw_pty_attach(&self, resume: Option<(u64, u64)>) -> RawPtyAttachPlan {
+        self.raw_pty_stream.attach(resume, |cached_primary| {
+            raw_pty_snapshot_ansi_for_terminal(&self.terminal, cached_primary)
+        })
+    }
+
+    pub(crate) fn raw_pty_stream(&self) -> RawPtyStream {
+        self.raw_pty_stream.clone()
     }
 
     pub fn detection_text(&self) -> String {
@@ -3049,7 +3208,13 @@ impl PaneRuntime {
     pub(crate) fn test_process_pty_bytes(&self, bytes: &[u8]) {
         self.content_seq.fetch_add(1, Ordering::AcqRel);
         let (tx, _rx) = mpsc::channel(1);
-        let _ = self.terminal.process_pty_bytes(self.pane_id, 0, bytes, &tx);
+        let primary_snapshot = (!self.terminal.alternate_screen_active()
+            && self.raw_pty_stream.entering_alternate_screen(bytes))
+        .then(|| raw_pty_snapshot_ansi_for_terminal(&self.terminal, None));
+        self.raw_pty_stream
+            .process_read(bytes, primary_snapshot, || {
+                let _ = self.terminal.process_pty_bytes(self.pane_id, 0, bytes, &tx);
+            });
         self.content_seq.fetch_add(1, Ordering::Release);
     }
 
@@ -3081,6 +3246,7 @@ impl PaneRuntime {
                 terminal: Arc::new(PaneTerminal::new(
                     GhosttyPaneTerminal::new(terminal, tx.clone()).unwrap(),
                 )),
+                raw_pty_stream: RawPtyStream::new(),
                 io: PaneRuntimeIo::TestChannel {
                     sender: tx,
                     resize_tx,
@@ -3650,6 +3816,7 @@ mod tests {
             terminal: Arc::new(PaneTerminal::new(
                 GhosttyPaneTerminal::new(terminal, tx.clone()).unwrap(),
             )),
+            raw_pty_stream: RawPtyStream::new(),
             io: PaneRuntimeIo::TestChannel {
                 sender: tx,
                 resize_tx,
@@ -3682,6 +3849,7 @@ mod tests {
             terminal: Arc::new(PaneTerminal::new(
                 GhosttyPaneTerminal::new(terminal, tx.clone()).unwrap(),
             )),
+            raw_pty_stream: RawPtyStream::new(),
             io: PaneRuntimeIo::TestChannel {
                 sender: tx,
                 resize_tx,

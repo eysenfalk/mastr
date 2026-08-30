@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Current protocol version. Bumped when wire format changes incompatibly.
-pub const PROTOCOL_VERSION: u32 = 21;
+pub const PROTOCOL_VERSION: u32 = 23;
 
 /// Maximum allowed frame payload size (2 MB). Frames larger than this are
 /// rejected to prevent denial-of-service via oversized length prefixes.
@@ -41,6 +41,8 @@ pub enum RenderEncoding {
     SemanticFrame,
     /// Send already-diffed terminal ANSI byte streams.
     TerminalAnsi,
+    /// Parse the selected pane's original PTY byte stream in the client.
+    RawPtyStream,
 }
 
 /// Keybinding profile requested by an attached app client.
@@ -449,6 +451,18 @@ pub enum ClientMessage {
 
     /// The direct command was written and flushed; terminal response timing starts now.
     GraphicsTransmissionStarted { transfer_id: u64, image_id: u32 },
+
+    /// Starts a raw stream from a fresh snapshot of `target`.
+    RawPtyAttach { target: String, takeover: bool },
+    /// Resumes a raw stream when the generation and parser offset remain journaled.
+    RawPtyResume {
+        target: String,
+        takeover: bool,
+        stream_id: u64,
+        parsed_seq: u64,
+    },
+    /// Highest exclusive byte offset fully parsed by the client.
+    RawPtyOutputAck { stream_id: u64, parsed_seq: u64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -656,6 +670,15 @@ pub enum NotifyKind {
     SystemToast,
 }
 
+/// Fidelity of the state supplied when a raw PTY stream starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RawPtyRecovery {
+    /// Bounded history replays into a fresh parser; arbitrary VT state is not guaranteed.
+    BestEffortReplay,
+    /// The existing parser resumes the same stream at an acknowledged sequence.
+    ExactResume,
+}
+
 /// Messages sent from the server to the client over the client protocol socket.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServerMessage {
@@ -753,6 +776,20 @@ pub enum ServerMessage {
 
     /// Suppress a direct command that expired before terminal delivery.
     GraphicsTransmissionRetired { transfer_id: u64, image_id: u32 },
+
+    /// Establishes a parser generation. `snapshot` is absent on exact resume.
+    RawPtyStreamStart {
+        stream_id: u64,
+        start_seq: u64,
+        recovery: RawPtyRecovery,
+        snapshot: Option<Vec<u8>>,
+    },
+    /// Contiguous original PTY bytes starting at `start_seq`.
+    RawPtyStreamChunk {
+        stream_id: u64,
+        start_seq: u64,
+        data: Vec<u8>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -1359,6 +1396,34 @@ mod tests {
     }
 
     #[test]
+    fn raw_pty_client_messages_roundtrip() {
+        let messages = [
+            ClientMessage::RawPtyAttach {
+                target: "w1:p1".to_owned(),
+                takeover: true,
+            },
+            ClientMessage::RawPtyResume {
+                target: "term_1".to_owned(),
+                takeover: false,
+                stream_id: 42,
+                parsed_seq: 99,
+            },
+            ClientMessage::RawPtyOutputAck {
+                stream_id: 42,
+                parsed_seq: 123,
+            },
+        ];
+        for message in messages {
+            let encoded = bincode::serde::encode_to_vec(&message, bincode::config::standard())
+                .expect("encode raw PTY client message");
+            let (decoded, _): (ClientMessage, _) =
+                bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
+                    .expect("decode raw PTY client message");
+            assert_eq!(message, decoded);
+        }
+    }
+
+    #[test]
     fn client_attach_scroll_roundtrip() {
         let msg = ClientMessage::AttachScroll {
             source: AttachScrollSource::Wheel,
@@ -1400,6 +1465,37 @@ mod tests {
         let (decoded, _): (ServerMessage, _) =
             bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
         assert_eq!(msg, decoded);
+    }
+
+    #[test]
+    fn raw_pty_server_messages_roundtrip() {
+        let messages = [
+            ServerMessage::RawPtyStreamStart {
+                stream_id: 42,
+                start_seq: 10,
+                recovery: RawPtyRecovery::BestEffortReplay,
+                snapshot: Some(b"snapshot".to_vec()),
+            },
+            ServerMessage::RawPtyStreamStart {
+                stream_id: 42,
+                start_seq: 18,
+                recovery: RawPtyRecovery::ExactResume,
+                snapshot: None,
+            },
+            ServerMessage::RawPtyStreamChunk {
+                stream_id: 42,
+                start_seq: 10,
+                data: b"live".to_vec(),
+            },
+        ];
+        for message in messages {
+            let encoded = bincode::serde::encode_to_vec(&message, bincode::config::standard())
+                .expect("encode raw PTY server message");
+            let (decoded, _): (ServerMessage, _) =
+                bincode::serde::decode_from_slice(&encoded, bincode::config::standard())
+                    .expect("decode raw PTY server message");
+            assert_eq!(message, decoded);
+        }
     }
 
     #[test]

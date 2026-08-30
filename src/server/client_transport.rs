@@ -30,6 +30,8 @@ use crate::protocol::{
 /// right edge clipped.
 const MIN_CLIENT_COLS: u16 = 1;
 const MIN_CLIENT_ROWS: u16 = 1;
+const MAX_CLIENT_COLS: u16 = 1_000;
+const MAX_CLIENT_ROWS: u16 = 500;
 
 /// How long to wait for a client handshake before closing the connection.
 /// Set to 4 seconds (rather than 5) to guarantee the connection is closed
@@ -43,6 +45,8 @@ const MAX_INPUT_PAYLOAD: usize = 1024 * 1024; // 1 MB
 const MAX_INPUT_EVENT_BATCH: usize = 4096;
 /// Maximum encoded mouse report accepted with pixel geometry.
 const MAX_PIXEL_MOUSE_PAYLOAD: usize = 128;
+/// Bounded reliable lane for raw PTY stream frames, including one ANSI snapshot.
+const MAX_STREAM_QUEUE_BYTES: usize = MAX_GRAPHICS_FRAME_SIZE + 4;
 
 /// Channels owned by the server side of a client writer thread.
 #[derive(Clone, Debug)]
@@ -51,9 +55,15 @@ pub(crate) struct ClientWriter {
     pub(crate) control: ClientControlWriter,
     /// Droppable render messages. Capacity is one so slow clients cannot build lag.
     pub(crate) render: ClientRenderWriter,
+    /// Reliable, byte-bounded raw PTY stream messages.
+    pub(crate) stream: ClientStreamWriter,
 }
 
 impl ClientWriter {
+    pub(crate) fn begin_stream(&self) {
+        self.stream.queue.begin_stream();
+    }
+
     pub(crate) fn replace_with_cleanup(&self, data: Vec<u8>) {
         self.render.queue.replace_with_cleanup(data);
     }
@@ -76,17 +86,21 @@ impl ClientWriter {
         let queue = ClientWriterQueue::new();
         let drain = queue.clone();
         let control_writer = ClientControlWriter::queue(queue.clone());
-        let mut render_writer = ClientRenderWriter::queue(queue);
+        let mut render_writer = ClientRenderWriter::queue(queue.clone());
         render_writer.test_render = Some(render.clone());
+        let stream_writer = ClientStreamWriter::queue(queue);
         let writer = Self {
             control: control_writer,
             render: render_writer,
+            stream: stream_writer,
         };
         std::thread::spawn(move || {
             while let Some(item) = drain.recv() {
                 let sent = match item {
                     ClientWriteItem::Control(data) => control.send(data).is_ok(),
-                    ClientWriteItem::Render(data) => render.send(data).is_ok(),
+                    ClientWriteItem::Render(data) | ClientWriteItem::Stream(data) => {
+                        render.send(data).is_ok()
+                    }
                 };
                 if !sent {
                     break;
@@ -107,6 +121,13 @@ pub(crate) struct ClientControlWriter {
 
 #[derive(Debug)]
 pub(crate) struct ClientRenderWriter {
+    queue: Arc<ClientWriterQueue>,
+    #[cfg(test)]
+    test_render: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ClientStreamWriter {
     queue: Arc<ClientWriterQueue>,
     #[cfg(test)]
     test_render: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
@@ -133,6 +154,7 @@ macro_rules! writer_handle {
 }
 writer_handle!(ClientControlWriter);
 writer_handle!(ClientRenderWriter);
+writer_handle!(ClientStreamWriter);
 
 impl ClientControlWriter {
     fn queue(queue: Arc<ClientWriterQueue>) -> Self {
@@ -146,6 +168,29 @@ impl ClientControlWriter {
 
     pub(crate) fn send(&self, data: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
         self.queue.send_control(data)
+    }
+}
+
+impl ClientStreamWriter {
+    fn queue(queue: Arc<ClientWriterQueue>) -> Self {
+        queue.add_sender();
+        Self {
+            queue,
+            #[cfg(test)]
+            test_render: None,
+        }
+    }
+
+    pub(crate) fn send(
+        &self,
+        data: Vec<u8>,
+        cancelled: &AtomicBool,
+    ) -> Result<(), SendError<Vec<u8>>> {
+        self.queue.send_stream(data, cancelled)
+    }
+
+    pub(crate) fn cancel_pending(&self) {
+        self.queue.cancel_stream();
     }
 }
 
@@ -182,6 +227,8 @@ struct ClientWriterQueue {
 struct ClientWriterQueueState {
     control: VecDeque<Vec<u8>>,
     ordered: VecDeque<Vec<u8>>,
+    stream: VecDeque<Vec<u8>>,
+    stream_bytes: usize,
     render: Option<Vec<u8>>,
     senders: usize,
     writer_alive: bool,
@@ -191,6 +238,7 @@ struct ClientWriterQueueState {
 enum ClientWriteItem {
     Control(Vec<u8>),
     Render(Vec<u8>),
+    Stream(Vec<u8>),
 }
 
 impl ClientWriterQueue {
@@ -223,6 +271,45 @@ impl ClientWriterQueue {
         state.control.push_back(data);
         self.ready.notify_one();
         Ok(())
+    }
+
+    fn send_stream(&self, data: Vec<u8>, cancelled: &AtomicBool) -> Result<(), SendError<Vec<u8>>> {
+        if data.len() > MAX_STREAM_QUEUE_BYTES {
+            return Err(SendError(data));
+        }
+        let mut state = self.lock_state();
+        while state.writer_alive
+            && !cancelled.load(Ordering::Acquire)
+            && state.stream_bytes.saturating_add(data.len()) > MAX_STREAM_QUEUE_BYTES
+        {
+            state = self
+                .ready
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        if !state.writer_alive || cancelled.load(Ordering::Acquire) {
+            return Err(SendError(data));
+        }
+        state.stream_bytes = state.stream_bytes.saturating_add(data.len());
+        state.stream.push_back(data);
+        self.ready.notify_one();
+        Ok(())
+    }
+
+    fn begin_stream(&self) {
+        let mut state = self.lock_state();
+        state.ordered.clear();
+        state.render = None;
+        state.stream.clear();
+        state.stream_bytes = 0;
+        self.ready.notify_all();
+    }
+
+    fn cancel_stream(&self) {
+        let mut state = self.lock_state();
+        state.stream.clear();
+        state.stream_bytes = 0;
+        self.ready.notify_all();
     }
 
     fn try_send_render(&self, data: Vec<u8>) -> Result<(), TrySendError<Vec<u8>>> {
@@ -258,6 +345,8 @@ impl ClientWriterQueue {
         let mut state = self.lock_state();
         state.render = None;
         state.ordered.clear();
+        state.stream.clear();
+        state.stream_bytes = 0;
         if state.writer_alive {
             state.control.push_back(data);
             self.ready.notify_one();
@@ -273,6 +362,11 @@ impl ClientWriterQueue {
             if let Some(data) = state.ordered.pop_front() {
                 self.ready.notify_one();
                 return Some(ClientWriteItem::Render(data));
+            }
+            if let Some(data) = state.stream.pop_front() {
+                state.stream_bytes = state.stream_bytes.saturating_sub(data.len());
+                self.ready.notify_all();
+                return Some(ClientWriteItem::Stream(data));
             }
             if let Some(data) = state.render.take() {
                 return Some(ClientWriteItem::Render(data));
@@ -292,6 +386,8 @@ impl ClientWriterQueue {
         state.writer_alive = false;
         state.render = None;
         state.ordered.clear();
+        state.stream.clear();
+        state.stream_bytes = 0;
         self.ready.notify_all();
     }
 
@@ -319,7 +415,10 @@ pub(crate) enum ServerEvent {
         writer: ClientWriter,
     },
     /// A client sent an input message.
-    ClientInput { client_id: u64, data: Vec<u8> },
+    ClientInput {
+        client_id: u64,
+        data: Vec<u8>,
+    },
     /// A client reported the one armed Kitty regular-file response.
     GraphicsTransmissionResult {
         client_id: u64,
@@ -362,12 +461,30 @@ pub(crate) enum ServerEvent {
         takeover: bool,
     },
     /// A client requested read-only observation of one terminal.
-    ClientObserveTerminal { client_id: u64, target: String },
+    ClientObserveTerminal {
+        client_id: u64,
+        target: String,
+    },
     /// A client requested writable control of one terminal.
     ClientControlTerminal {
         client_id: u64,
         target: String,
         takeover: bool,
+    },
+    ClientRawPtyAttach {
+        client_id: u64,
+        target: String,
+        takeover: bool,
+        resume: Option<(u64, u64)>,
+    },
+    ClientRawPtyOutputAck {
+        client_id: u64,
+        stream_id: u64,
+        parsed_seq: u64,
+    },
+    RawPtyStreamGap {
+        client_id: u64,
+        stream_id: u64,
     },
     /// A direct terminal attach client requested scrollback movement.
     ClientAttachScroll {
@@ -388,20 +505,36 @@ pub(crate) enum ServerEvent {
         cell_height_px: u32,
     },
     /// A client detached gracefully.
-    ClientDetach { client_id: u64 },
+    ClientDetach {
+        client_id: u64,
+    },
     /// A client connection was lost.
-    ClientDisconnected { client_id: u64 },
+    ClientDisconnected {
+        client_id: u64,
+    },
     /// A client writer drained its render slot and can accept another render.
-    ClientWriterDrained { client_id: u64 },
+    ClientWriterDrained {
+        client_id: u64,
+    },
     /// Ctrl+C or external shutdown signal received.
     QuitSignal,
 }
 
-/// Clamp client-reported terminal dimensions to a minimum viable size.
+/// Clamp client-reported terminal dimensions to a bounded viable size.
 pub(crate) fn clamp_terminal_size(cols: u16, rows: u16) -> (u16, u16) {
-    let clamped_cols = cols.max(MIN_CLIENT_COLS);
-    let clamped_rows = rows.max(MIN_CLIENT_ROWS);
+    let clamped_cols = cols.clamp(MIN_CLIENT_COLS, MAX_CLIENT_COLS);
+    let clamped_rows = rows.clamp(MIN_CLIENT_ROWS, MAX_CLIENT_ROWS);
     (clamped_cols, clamped_rows)
+}
+
+fn validate_launch_encoding(
+    encoding: RenderEncoding,
+    launch_mode: ClientLaunchMode,
+) -> Result<(), String> {
+    if encoding == RenderEncoding::RawPtyStream && launch_mode != ClientLaunchMode::TerminalAttach {
+        return Err("raw PTY stream encoding requires terminal-attach launch mode".to_owned());
+    }
+    Ok(())
 }
 
 fn parse_client_keybindings(
@@ -589,6 +722,16 @@ pub(crate) fn handle_client_handshake(
                 }
             }
 
+            if let Err(error) = validate_launch_encoding(requested_encoding, launch_mode) {
+                let welcome = ServerMessage::Welcome {
+                    version: PROTOCOL_VERSION,
+                    encoding: RenderEncoding::SemanticFrame,
+                    error: Some(error),
+                };
+                let _ = protocol::write_message(&mut stream, &welcome);
+                return Ok(());
+            }
+
             let keybindings = match parse_client_keybindings(keybindings) {
                 Ok(keybindings) => keybindings,
                 Err(error) => {
@@ -652,6 +795,7 @@ pub(crate) fn handle_client_handshake(
     let writer = ClientWriter {
         control: ClientControlWriter::queue(writer_queue.clone()),
         render: ClientRenderWriter::queue(writer_queue.clone()),
+        stream: ClientStreamWriter::queue(writer_queue.clone()),
     };
 
     // Spawn a writer thread that forwards messages from the channels to the stream.
@@ -713,6 +857,7 @@ fn client_writer_loop(
     while let Some(item) = writer_queue.recv() {
         let written = match item {
             ClientWriteItem::Control(data) => write_framed_bytes(&mut stream, &data),
+            ClientWriteItem::Stream(data) => write_framed_bytes(&mut stream, &data),
             ClientWriteItem::Render(data) => {
                 let _ =
                     server_event_tx.blocking_send(ServerEvent::ClientWriterDrained { client_id });
@@ -894,6 +1039,31 @@ fn client_read_loop(
                     takeover,
                 }
             }
+            ClientMessage::RawPtyAttach { target, takeover } => ServerEvent::ClientRawPtyAttach {
+                client_id,
+                target,
+                takeover,
+                resume: None,
+            },
+            ClientMessage::RawPtyResume {
+                target,
+                takeover,
+                stream_id,
+                parsed_seq,
+            } => ServerEvent::ClientRawPtyAttach {
+                client_id,
+                target,
+                takeover,
+                resume: Some((stream_id, parsed_seq)),
+            },
+            ClientMessage::RawPtyOutputAck {
+                stream_id,
+                parsed_seq,
+            } => ServerEvent::ClientRawPtyOutputAck {
+                client_id,
+                stream_id,
+                parsed_seq,
+            },
             ClientMessage::GraphicsTransmissionResult {
                 transfer_id,
                 image_id,
@@ -1054,6 +1224,7 @@ mod tests {
             ClientWriter {
                 control: ClientControlWriter::queue(queue.clone()),
                 render: ClientRenderWriter::queue(queue.clone()),
+                stream: ClientStreamWriter::queue(queue.clone()),
             },
             queue,
         )
@@ -1104,6 +1275,33 @@ mod tests {
             writer.render.send_ordered(b"closed".to_vec()),
             Err(TrySendError::Disconnected(_))
         ));
+    }
+
+    #[test]
+    fn raw_stream_lane_is_reliable_bounded_and_control_prioritized() {
+        let (writer, queue) = test_queue_writer();
+        let cancelled = AtomicBool::new(false);
+        writer
+            .stream
+            .send(b"stream".to_vec(), &cancelled)
+            .expect("stream frame fits");
+        writer
+            .control
+            .send(b"control".to_vec())
+            .expect("control frame fits");
+        assert_eq!(queue.lock_state().stream_bytes, b"stream".len());
+        assert_eq!(
+            queue.recv(),
+            Some(ClientWriteItem::Control(b"control".to_vec()))
+        );
+        assert_eq!(
+            queue.recv(),
+            Some(ClientWriteItem::Stream(b"stream".to_vec()))
+        );
+        assert_eq!(queue.lock_state().stream_bytes, 0);
+
+        let oversized = vec![0; MAX_STREAM_QUEUE_BYTES + 1];
+        assert!(writer.stream.send(oversized, &cancelled).is_err());
     }
 
     #[test]
@@ -1258,6 +1456,24 @@ mod tests {
         assert_eq!(
             clamp_terminal_size(MIN_CLIENT_COLS, MIN_CLIENT_ROWS),
             (MIN_CLIENT_COLS, MIN_CLIENT_ROWS)
+        );
+    }
+
+    #[test]
+    fn raw_pty_encoding_requires_terminal_attach_launch_mode() {
+        assert!(validate_launch_encoding(
+            RenderEncoding::RawPtyStream,
+            ClientLaunchMode::TerminalAttach
+        )
+        .is_ok());
+        for launch_mode in [ClientLaunchMode::App, ClientLaunchMode::AppDirectGraphics] {
+            assert_eq!(
+                validate_launch_encoding(RenderEncoding::RawPtyStream, launch_mode),
+                Err("raw PTY stream encoding requires terminal-attach launch mode".to_owned())
+            );
+        }
+        assert!(
+            validate_launch_encoding(RenderEncoding::TerminalAnsi, ClientLaunchMode::App).is_ok()
         );
     }
 

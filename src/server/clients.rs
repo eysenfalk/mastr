@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::protocol::RenderEncoding;
 use crate::server::client_transport::ClientWriter;
+use crate::server::raw_pty_stream::RawPtyPump;
 use crate::server::render_stream::ClientRenderState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +72,8 @@ pub(crate) struct ClientConnection {
     pub(crate) host_keyboard_report_all_active: Option<bool>,
     /// Temporary files staged from this client's local clipboard image pastes.
     pub(crate) staged_clipboard_files: Vec<PathBuf>,
+    /// Active raw PTY stream delivery, cancelled when the client or target changes.
+    pub(crate) raw_pty_pump: Option<RawPtyPump>,
     /// Channels for sending framed ServerMessage data to the client writer thread.
     pub(crate) writer: Option<ClientWriter>,
 }
@@ -136,6 +139,7 @@ impl ClientConnection {
             host_sgr_pixels_active: None,
             host_keyboard_report_all_active: None,
             staged_clipboard_files: Vec::new(),
+            raw_pty_pump: None,
             writer,
         }
     }
@@ -168,6 +172,10 @@ impl ClientConnection {
 
     pub(crate) fn is_full_app_client(&self) -> bool {
         matches!(self.mode, ClientConnectionMode::App) && !self.pending_terminal_attach
+    }
+
+    pub(crate) fn is_raw_pty_streaming(&self) -> bool {
+        self.raw_pty_pump.is_some()
     }
 
     pub(crate) fn request_semantic_redraw_after_input(&mut self) {
@@ -293,6 +301,7 @@ pub(crate) fn render_targets(
         .iter()
         .filter(|(_, client)| {
             client.writer.is_some()
+                && !client.is_raw_pty_streaming()
                 && (client.is_full_app_client()
                     || matches!(
                         client.mode,

@@ -2806,7 +2806,22 @@ impl HeadlessServer {
         terminal_id: String,
         takeover: bool,
     ) -> bool {
-        if !self.client_is_pending_terminal_mode(client_id) {
+        self.attach_terminal_client_impl(client_id, terminal_id, takeover, false)
+    }
+
+    fn attach_terminal_client_impl(
+        &mut self,
+        client_id: u64,
+        terminal_id: String,
+        takeover: bool,
+        allow_raw_retarget: bool,
+    ) -> bool {
+        let raw_retarget = allow_raw_retarget
+            && self.clients.get(&client_id).is_some_and(|client| {
+                matches!(client.mode, ClientConnectionMode::TerminalAttach { .. })
+                    && client.raw_pty_pump.is_some()
+            });
+        if !self.client_is_pending_terminal_mode(client_id) && !raw_retarget {
             self.send_to_client(
                 client_id,
                 ServerMessage::ServerShutdown {
@@ -2874,6 +2889,32 @@ impl HeadlessServer {
             }
         }
 
+        if raw_retarget {
+            let previous_terminal = self.clients.get(&client_id).and_then(|client| {
+                if let ClientConnectionMode::TerminalAttach { terminal_id } = &client.mode {
+                    Some(terminal_id.clone())
+                } else {
+                    None
+                }
+            });
+            if previous_terminal.as_deref() != Some(terminal_id.as_str()) {
+                if let Some(previous_terminal) = previous_terminal {
+                    if self.terminal_attach_owners.get(&previous_terminal) == Some(&client_id) {
+                        self.terminal_attach_owners.remove(&previous_terminal);
+                    }
+                    if let Some(previous_id) = self.terminal_id_by_string(&previous_terminal) {
+                        self.app
+                            .state
+                            .direct_attach_resize_locks
+                            .remove(&previous_id);
+                    }
+                }
+            }
+            if let Some(client) = self.clients.get_mut(&client_id) {
+                client.raw_pty_pump.take();
+            }
+        }
+
         let stamp = self.allocate_activity_stamp();
         let Some(client) = self.clients.get_mut(&client_id) else {
             return false;
@@ -2904,6 +2945,105 @@ impl HeadlessServer {
             runtime.resize(rows, cols, cell_size.width_px, cell_size.height_px);
         }
         true
+    }
+
+    fn attach_raw_pty_client(
+        &mut self,
+        client_id: u64,
+        target: String,
+        takeover: bool,
+        resume: Option<(u64, u64)>,
+    ) -> bool {
+        // RawPtyAttach is the protocol-22 mode selector after a deliberately
+        // legacy-decodable TerminalAnsi Hello. Only the first direct-attach
+        // message (or an already active raw pump) may select it; an ordinary
+        // terminal attach cannot change encoding later on the same connection.
+        let supported = self.client_is_pending_terminal_mode(client_id)
+            || self
+                .clients
+                .get(&client_id)
+                .is_some_and(|client| client.raw_pty_pump.is_some());
+        if !supported {
+            return false;
+        }
+        let Some(terminal_id) = self.resolve_terminal_target_id_string(&target) else {
+            self.send_to_client(
+                client_id,
+                ServerMessage::ServerShutdown {
+                    reason: Some(format!(
+                        "raw PTY attach failed: terminal target {target} not found"
+                    )),
+                },
+            );
+            self.remove_client_and_resize_if_needed(client_id);
+            return false;
+        };
+        if !self.attach_terminal_client_impl(client_id, terminal_id.clone(), takeover, true) {
+            return false;
+        }
+        self.start_raw_pty_pump(client_id, &terminal_id, resume)
+    }
+
+    fn start_raw_pty_pump(
+        &mut self,
+        client_id: u64,
+        terminal_id: &str,
+        resume: Option<(u64, u64)>,
+    ) -> bool {
+        let Some(runtime) = self.runtime_for_terminal_id_string(terminal_id) else {
+            return false;
+        };
+        let plan = runtime.raw_pty_attach(resume);
+        let stream = runtime.raw_pty_stream();
+        let Some(writer) = self
+            .clients
+            .get(&client_id)
+            .and_then(|client| client.writer.as_ref().cloned())
+        else {
+            return false;
+        };
+        writer.begin_stream();
+        let pump = crate::server::raw_pty_stream::RawPtyPump::start(
+            client_id,
+            plan,
+            stream,
+            writer.stream.clone(),
+            self.server_event_tx.clone(),
+        );
+        if let Some(client) = self.clients.get_mut(&client_id) {
+            client.raw_pty_pump = Some(pump);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn handle_raw_pty_ack(&mut self, client_id: u64, stream_id: u64, parsed_seq: u64) -> bool {
+        self.clients
+            .get(&client_id)
+            .and_then(|client| client.raw_pty_pump.as_ref())
+            .is_some_and(|pump| pump.acknowledge(stream_id, parsed_seq))
+    }
+
+    fn handle_raw_pty_gap(&mut self, client_id: u64, stream_id: u64) -> bool {
+        let terminal_id = self.clients.get(&client_id).and_then(|client| {
+            let pump = client.raw_pty_pump.as_ref()?;
+            if pump.stream_id() != stream_id {
+                return None;
+            }
+            if let ClientConnectionMode::TerminalAttach { terminal_id } = &client.mode {
+                Some(terminal_id.clone())
+            } else {
+                None
+            }
+        });
+        let Some(terminal_id) = terminal_id else {
+            return false;
+        };
+        if let Some(client) = self.clients.get_mut(&client_id) {
+            client.raw_pty_pump.take();
+        }
+        self.start_raw_pty_pump(client_id, &terminal_id, None)
     }
 
     fn client_is_pending_terminal_mode(&self, client_id: u64) -> bool {
@@ -3088,6 +3228,27 @@ impl HeadlessServer {
                 target,
                 takeover,
             } => self.control_terminal_client(client_id, target, takeover),
+            ServerEvent::ClientRawPtyAttach {
+                client_id,
+                target,
+                takeover,
+                resume,
+            } => self.attach_raw_pty_client(client_id, target, takeover, resume),
+            ServerEvent::ClientRawPtyOutputAck {
+                client_id,
+                stream_id,
+                parsed_seq,
+            } => {
+                self.handle_raw_pty_ack(client_id, stream_id, parsed_seq);
+                false
+            }
+            ServerEvent::RawPtyStreamGap {
+                client_id,
+                stream_id,
+            } => {
+                self.handle_raw_pty_gap(client_id, stream_id);
+                false
+            }
             ServerEvent::ClientAttachScroll {
                 client_id,
                 source,
@@ -4125,7 +4286,7 @@ impl HeadlessServer {
         for client in self
             .clients
             .values()
-            .filter(|client| client.writer.is_some())
+            .filter(|client| client.writer.is_some() && !client.is_raw_pty_streaming())
         {
             match &client.mode {
                 ClientConnectionMode::App if client.is_full_app_client() => {
@@ -6555,6 +6716,24 @@ next_tab = ""
             writer,
         }));
         control_rx
+    }
+
+    #[test]
+    fn raw_pty_mode_selects_from_pending_attach_but_not_after_terminal_ansi_attach() {
+        with_terminal_session_test_server(
+            |server, _terminal_id, terminal_id_string, _public_pane_id| {
+                let _ansi_control_rx = connect_pending_terminal_client_with_control_rx(server, 7);
+                assert!(server.attach_terminal_client(7, terminal_id_string.clone(), false));
+                assert!(!server.attach_raw_pty_client(7, terminal_id_string.clone(), false, None,));
+
+                let _raw_control_rx = connect_pending_terminal_client_with_control_rx(server, 8);
+                assert!(server.attach_raw_pty_client(8, terminal_id_string, true, None));
+                assert!(server
+                    .clients
+                    .get(&8)
+                    .is_some_and(ClientConnection::is_raw_pty_streaming));
+            },
+        );
     }
 
     #[test]

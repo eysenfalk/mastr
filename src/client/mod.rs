@@ -1899,6 +1899,10 @@ async fn run_client_loop(
                 ServerMessage::Welcome { .. } => {
                     debug!("received unexpected Welcome in main loop");
                 }
+                ServerMessage::RawPtyStreamStart { .. }
+                | ServerMessage::RawPtyStreamChunk { .. } => {
+                    debug!("received unexpected raw PTY stream message in native client");
+                }
             },
             ClientLoopEvent::ServerDisconnected => {
                 return Err(ClientError::ConnectionLost(io::Error::new(

@@ -365,6 +365,17 @@ impl TerminalRuntime {
         self.0.visible_ansi()
     }
 
+    pub(crate) fn raw_pty_attach(
+        &self,
+        resume: Option<(u64, u64)>,
+    ) -> crate::pane::RawPtyAttachPlan {
+        self.0.raw_pty_attach(resume)
+    }
+
+    pub(crate) fn raw_pty_stream(&self) -> crate::pane::RawPtyStream {
+        self.0.raw_pty_stream()
+    }
+
     pub fn detection_text(&self) -> String {
         self.0.detection_text()
     }
@@ -628,5 +639,58 @@ impl TerminalRuntime {
             channel_capacity,
         );
         (Self(runtime), rx)
+    }
+}
+
+#[cfg(all(test, unix))]
+mod raw_pty_snapshot_tests {
+    use super::TerminalRuntime;
+
+    #[tokio::test]
+    async fn raw_snapshot_restores_primary_and_alternate_state_and_input_modes() {
+        let primary = TerminalRuntime::test_with_screen_bytes(20, 4, b"primary\x1b[?2004h");
+        let primary_snapshot = primary
+            .raw_pty_attach(None)
+            .snapshot
+            .expect("fresh primary snapshot");
+        assert!(primary_snapshot.starts_with(b"\x1bc\x1b[?1049l"));
+        assert!(primary_snapshot
+            .windows(b"primary".len())
+            .any(|w| w == b"primary"));
+        assert!(primary_snapshot
+            .windows(b"\x1b[?2004h".len())
+            .any(|w| w == b"\x1b[?2004h"));
+
+        let primary_with_history = TerminalRuntime::test_with_scrollback_bytes(
+            20,
+            4,
+            64 * 1024,
+            b"line-1\r\nline-2\r\nline-3\r\nline-4\r\nline-5\r\nline-6\r\nline-7\r\nline-8",
+        );
+        let history_snapshot = primary_with_history
+            .raw_pty_attach(None)
+            .snapshot
+            .expect("fresh primary snapshot with history");
+        for expected in [b"line-1".as_slice(), b"line-8"] {
+            assert!(history_snapshot
+                .windows(expected.len())
+                .any(|window| window == expected));
+        }
+
+        let alternate = TerminalRuntime::test_with_screen_bytes(
+            20,
+            4,
+            b"\x1b[?1049hAlternate\x1b[?1000h\x1b[?1006h\x1b[>1u",
+        );
+        let alternate_snapshot = alternate
+            .raw_pty_attach(None)
+            .snapshot
+            .expect("fresh alternate snapshot");
+        assert!(alternate_snapshot.starts_with(b"\x1bc\x1b[?1049l\x1b[?1049h"));
+        for expected in [b"Alternate".as_slice(), b"\x1b[?1000h", b"\x1b[?1006h"] {
+            assert!(alternate_snapshot
+                .windows(expected.len())
+                .any(|window| window == expected));
+        }
     }
 }

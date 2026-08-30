@@ -25,7 +25,7 @@ impl ClientRenderState {
     pub(crate) fn new(render_encoding: RenderEncoding) -> Self {
         match render_encoding {
             RenderEncoding::SemanticFrame => Self::Semantic { last_frame: None },
-            RenderEncoding::TerminalAnsi => Self::TerminalAnsi {
+            RenderEncoding::TerminalAnsi | RenderEncoding::RawPtyStream => Self::TerminalAnsi {
                 blit_encoder: BlitEncoder::new(),
                 seq: 0,
                 repaint_pending: false,
@@ -78,6 +78,7 @@ impl ClientRenderState {
                 blit_encoder,
                 seq,
                 repaint_pending,
+                ..
             } => {
                 if !*repaint_pending && blit_encoder.is_current(&frame) {
                     crate::render_prof::event("prepare_frame.ansi.skip_current");
@@ -131,6 +132,7 @@ impl ClientRenderState {
                     blit_encoder,
                     seq,
                     repaint_pending,
+                    ..
                 },
                 PreparedRender::TerminalAnsi {
                     frame,
