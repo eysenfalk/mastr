@@ -6,7 +6,7 @@ mod completion;
 mod machine;
 
 pub(super) fn command() -> Command {
-    let command = Command::new("herdr")
+    let command = Command::new("mastr")
         .about("terminal workspace manager for AI coding agents")
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -92,7 +92,7 @@ fn write_requested_help(
     let mut root = command();
     root.build();
     let mut selected = &mut root;
-    let mut path = vec!["herdr".to_string()];
+    let mut path = vec!["mastr".to_string()];
     for segment in &args[1..help_index] {
         if selected.find_subcommand(segment).is_none() {
             break;
@@ -322,7 +322,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("read")
                 .about("Read agent terminal output")
-                .override_usage("herdr agent read <TARGET> [OPTIONS]")
+                .override_usage("mastr agent read <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(read_source_option(true))
                 .arg(option("lines", "N"))
@@ -339,7 +339,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("prompt")
                 .about("Submit a prompt to an agent")
-                .override_usage("herdr agent prompt <TARGET> <TEXT> [OPTIONS]")
+                .override_usage("mastr agent prompt <TARGET> <TEXT> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(required("text", "TEXT"))
                 .arg(
@@ -365,7 +365,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("rename")
                 .about("Rename an agent")
-                .override_usage("herdr agent rename <TARGET> <NAME>|--clear")
+                .override_usage("mastr agent rename <TARGET> <NAME>|--clear")
                 .arg(required("target", "TARGET"))
                 .arg(Arg::new("name").value_name("NAME"))
                 .arg(flag("clear"))
@@ -379,7 +379,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("wait")
                 .about("Wait until an agent reaches one of the requested states")
-                .override_usage("herdr agent wait <TARGET> [OPTIONS]")
+                .override_usage("mastr agent wait <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(
                     option("until", "STATUS")
@@ -395,7 +395,7 @@ fn agent_command() -> Command {
         .subcommand(
             Command::new("attach")
                 .about("Attach directly to an agent terminal")
-                .override_usage("herdr agent attach <TARGET> [OPTIONS]")
+                .override_usage("mastr agent attach <TARGET> [OPTIONS]")
                 .arg(required("target", "TARGET"))
                 .arg(flag("takeover")),
         )
@@ -403,7 +403,7 @@ fn agent_command() -> Command {
             Command::new("start")
                 .about("Start a supported interactive agent in an existing pane")
                 .override_usage(
-                    "herdr agent start <NAME> --kind <KIND> --pane <ID> [OPTIONS] [-- [AGENT_ARG]...]",
+                    "mastr agent start <NAME> --kind <KIND> --pane <ID> [OPTIONS] [-- [AGENT_ARG]...]",
                 )
                 .arg(required("name", "NAME"))
                 .arg(
@@ -428,7 +428,7 @@ fn agent_command() -> Command {
                         .last(true),
                 )
                 .after_help(
-                    "The pane must be at its interactive shell prompt. Success means the expected agent was detected in the same terminal and is ready for input.\n\nnext: herdr agent prompt <TARGET> <TEXT> --wait",
+                    "The pane must be at its interactive shell prompt. Success means the expected agent was detected in the same terminal and is ready for input.\n\nnext: mastr agent prompt <TARGET> <TEXT> --wait",
                 ),
         )
         .subcommand(
@@ -536,7 +536,7 @@ fn pane_command() -> Command {
                 .args(current_pane_args())
                 .arg(
                     option("right-click", "TARGET")
-                        .value_parser(["herdr", "pane"])
+                        .value_parser(["mastr", "pane"])
                         .required(true),
                 ),
         )
@@ -549,7 +549,7 @@ fn pane_command() -> Command {
                 .arg(option("ratio", "FLOAT"))
                 .arg(path_option("cwd", "PATH"))
                 .arg(env_option())
-                .arg(option("right-click", "TARGET").value_parser(["herdr", "pane"]))
+                .arg(option("right-click", "TARGET").value_parser(["mastr", "pane"]))
                 .arg(flag("focus"))
                 .arg(flag("no-focus")),
         )
@@ -1080,7 +1080,7 @@ mod tests {
 
         for path in paths {
             for flag in ["-h", "--help"] {
-                let mut args = vec!["herdr".to_string()];
+                let mut args = vec!["mastr".to_string()];
                 args.extend(path.iter().cloned());
                 args.push(flag.to_string());
                 let mut output = Vec::new();
@@ -1091,7 +1091,7 @@ mod tests {
                 );
                 let output = String::from_utf8(output).unwrap();
                 assert!(
-                    output.contains(&format!("Usage: herdr {}", path.join(" "))),
+                    output.contains(&format!("Usage: mastr {}", path.join(" "))),
                     "unexpected help for herdr {}: {output}",
                     path.join(" ")
                 );
@@ -1173,7 +1173,7 @@ mod tests {
     fn agent_prompt_until_requires_wait() {
         let error = super::command()
             .try_get_matches_from([
-                "herdr", "agent", "prompt", "reviewer", "hello", "--until", "idle",
+                "mastr", "agent", "prompt", "reviewer", "hello", "--until", "idle",
             ])
             .unwrap_err();
         assert_eq!(
@@ -1185,14 +1185,14 @@ mod tests {
     #[test]
     fn agent_rename_requires_exactly_one_name_or_clear() {
         for valid in [
-            &["herdr", "agent", "rename", "reviewer", "worker"][..],
-            &["herdr", "agent", "rename", "reviewer", "--clear"][..],
+            &["mastr", "agent", "rename", "reviewer", "worker"][..],
+            &["mastr", "agent", "rename", "reviewer", "--clear"][..],
         ] {
             assert!(super::command().try_get_matches_from(valid).is_ok());
         }
         for invalid in [
-            &["herdr", "agent", "rename", "reviewer"][..],
-            &["herdr", "agent", "rename", "reviewer", "worker", "--clear"][..],
+            &["mastr", "agent", "rename", "reviewer"][..],
+            &["mastr", "agent", "rename", "reviewer", "worker", "--clear"][..],
         ] {
             assert!(super::command().try_get_matches_from(invalid).is_err());
         }
@@ -1200,7 +1200,7 @@ mod tests {
         let mut help = Vec::new();
         super::write_requested_help(
             &[
-                "herdr".to_string(),
+                "mastr".to_string(),
                 "agent".to_string(),
                 "rename".to_string(),
                 "--help".to_string(),
@@ -1211,7 +1211,7 @@ mod tests {
         .unwrap();
         assert!(String::from_utf8(help)
             .unwrap()
-            .contains("Usage: herdr agent rename <TARGET> <NAME>|--clear"));
+            .contains("Usage: mastr agent rename <TARGET> <NAME>|--clear"));
     }
 
     #[test]
@@ -1309,7 +1309,7 @@ mod tests {
     }
 
     fn long_help(path: &[&str]) -> String {
-        let mut args = vec!["herdr".to_string()];
+        let mut args = vec!["mastr".to_string()];
         args.extend(path.iter().map(|segment| segment.to_string()));
         args.push("--help".to_string());
         let mut output = Vec::new();
@@ -1346,7 +1346,7 @@ mod tests {
             "agent start dropped its existing after_help: {agent_start}"
         );
         assert!(
-            agent_start.contains("next: herdr agent prompt <TARGET> <TEXT> --wait"),
+            agent_start.contains("next: mastr agent prompt <TARGET> <TEXT> --wait"),
             "agent start is missing its next-step hint: {agent_start}"
         );
 
@@ -1370,7 +1370,7 @@ mod tests {
         ] {
             let mut cmd = super::command();
             let mut output = Vec::new();
-            clap_complete::generate(shell, &mut cmd, "herdr", &mut output);
+            clap_complete::generate(shell, &mut cmd, "mastr", &mut output);
             assert!(!output.is_empty(), "empty {shell:?} completion output");
         }
     }

@@ -879,7 +879,7 @@ mod tests {
         let mut state = state_with_workspaces(&["main"]);
         state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: PathBuf::from("/repo/herdr"),
             checkout_path: PathBuf::from("/repo/herdr/worktree-a"),
             is_linked_worktree: true,

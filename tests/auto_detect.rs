@@ -87,11 +87,11 @@ fn spawn_server(
     api_socket_path: &Path,
     _client_socket_path: &Path,
 ) -> SpawnedHerdr {
-    fs::create_dir_all(config_home.join("herdr")).unwrap();
+    fs::create_dir_all(config_home.join("mastr")).unwrap();
     fs::create_dir_all(runtime_dir).unwrap();
     register_runtime_dir(runtime_dir);
     fs::write(
-        config_home.join("herdr/config.toml"),
+        config_home.join("mastr/config.toml"),
         "onboarding = false\n",
     )
     .unwrap();
@@ -105,14 +105,14 @@ fn spawn_server(
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_mastr"));
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("MASTR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("MASTR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("MASTR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());
@@ -131,11 +131,11 @@ fn spawn_herdr_auto(
     api_socket_path: &Path,
     _client_socket_path: &Path,
 ) -> SpawnedHerdr {
-    fs::create_dir_all(config_home.join("herdr")).unwrap();
+    fs::create_dir_all(config_home.join("mastr")).unwrap();
     fs::create_dir_all(runtime_dir).unwrap();
     register_runtime_dir(runtime_dir);
     fs::write(
-        config_home.join("herdr/config.toml"),
+        config_home.join("mastr/config.toml"),
         "onboarding = false\n",
     )
     .unwrap();
@@ -149,14 +149,14 @@ fn spawn_herdr_auto(
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_mastr"));
     // No subcommand → auto-detect launch.
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", api_socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("MASTR_SOCKET_PATH", api_socket_path);
+    cmd.env_remove("MASTR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("MASTR_ENV");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());
@@ -200,9 +200,9 @@ fn wait_for_log_contains(path: &Path, needle: &str, timeout: Duration) {
 }
 
 fn run_cli(socket_path: &Path, args: &[&str]) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
     command.args(args);
-    command.env("HERDR_SOCKET_PATH", socket_path);
+    command.env("MASTR_SOCKET_PATH", socket_path);
     command.output().unwrap()
 }
 
@@ -245,8 +245,8 @@ fn auto_detect_no_server_spawns_server_and_attaches() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     // Ensure no server is running initially.
     assert!(
@@ -294,8 +294,8 @@ fn auto_detect_server_running_attaches_directly() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     // Start a server explicitly.
     let server = spawn_server(&config_home, &runtime_dir, &api_socket, &client_socket);
@@ -338,7 +338,7 @@ fn auto_detect_server_running_attaches_directly() {
 }
 
 /// Socket path resolution is consistent between server and client.
-/// Both derive the client socket from the `HERDR_SOCKET_PATH` override,
+/// Both derive the client socket from the `MASTR_SOCKET_PATH` override,
 /// so overriding the API socket keeps both endpoints aligned.
 #[test]
 fn auto_detect_socket_path_consistency() {
@@ -346,8 +346,8 @@ fn auto_detect_socket_path_consistency() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     // Run `herdr` with custom socket paths.
     let herdr = spawn_herdr_auto(&config_home, &runtime_dir, &api_socket, &client_socket);
@@ -388,8 +388,8 @@ fn cli_subcommands_work_through_server() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     // Start a server.
     let server = spawn_server(&config_home, &runtime_dir, &api_socket, &client_socket);
@@ -434,8 +434,8 @@ fn auto_detect_server_persists_and_reattaches() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     // Run `herdr` — auto-detect spawns server + attaches client.
     let mut client1 = spawn_herdr_auto(&config_home, &runtime_dir, &api_socket, &client_socket);
@@ -503,15 +503,15 @@ fn auto_detect_default_socket_path_from_config_dir() {
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
 
-    // Don't set HERDR_SOCKET_PATH or HERDR_CLIENT_SOCKET_PATH.
+    // Don't set MASTR_SOCKET_PATH or MASTR_CLIENT_SOCKET_PATH.
     // The default paths should come from the app config directory, not XDG_RUNTIME_DIR.
     let app_dir_name = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "mastr-dev"
     } else {
-        "herdr"
+        "mastr"
     };
-    let api_socket = config_home.join(app_dir_name).join("herdr.sock");
-    let client_socket = config_home.join(app_dir_name).join("herdr-client.sock");
+    let api_socket = config_home.join(app_dir_name).join("mastr.sock");
+    let client_socket = config_home.join(app_dir_name).join("mastr-client.sock");
 
     // Spawn server with XDG_RUNTIME_DIR set to a different directory to prove it is ignored.
     fs::create_dir_all(config_home.join(app_dir_name)).unwrap();
@@ -532,15 +532,15 @@ fn auto_detect_default_socket_path_from_config_dir() {
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_mastr"));
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", &config_home);
     cmd.env("XDG_RUNTIME_DIR", &runtime_dir);
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("MASTR_ENV");
     // Explicitly remove socket overrides to test default path resolution.
-    cmd.env_remove("HERDR_SOCKET_PATH");
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env_remove("MASTR_SOCKET_PATH");
+    cmd.env_remove("MASTR_CLIENT_SOCKET_PATH");
 
     let child = pair.slave.spawn_command(cmd).unwrap();
     register_spawned_herdr_pid(child.process_id());
@@ -577,22 +577,22 @@ fn auto_detect_writes_client_and_server_logs_to_separate_files() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     let spawned = spawn_herdr_auto(&config_home, &runtime_dir, &api_socket, &client_socket);
     wait_for_socket(&api_socket, Duration::from_secs(10));
     wait_for_socket(&client_socket, Duration::from_secs(10));
 
     let app_dir_name = if cfg!(debug_assertions) {
-        "herdr-dev"
+        "mastr-dev"
     } else {
-        "herdr"
+        "mastr"
     };
     let log_dir = config_home.join(app_dir_name);
-    let client_log = log_dir.join("herdr-client.log");
-    let server_log = log_dir.join("herdr-server.log");
-    let monolith_log = log_dir.join("herdr.log");
+    let client_log = log_dir.join("mastr-client.log");
+    let server_log = log_dir.join("mastr-server.log");
+    let monolith_log = log_dir.join("mastr.log");
 
     wait_for_log_contains(
         &client_log,
@@ -608,7 +608,7 @@ fn auto_detect_writes_client_and_server_logs_to_separate_files() {
     let monolith_content = fs::read_to_string(&monolith_log).unwrap_or_default();
     assert!(
         !monolith_content.contains("subsystem=\"client\""),
-        "persistent client logs should not land in herdr.log: {monolith_content}"
+        "persistent client logs should not land in mastr.log: {monolith_content}"
     );
 
     cleanup_spawned_herdr(spawned, base);
@@ -620,8 +620,8 @@ fn auto_detect_respects_nested_guard_before_auto_attach() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let api_socket = runtime_dir.join("herdr.sock");
-    let client_socket = runtime_dir.join("herdr-client.sock");
+    let api_socket = runtime_dir.join("mastr.sock");
+    let client_socket = runtime_dir.join("mastr-client.sock");
 
     let server = spawn_server(&config_home, &runtime_dir, &api_socket, &client_socket);
     wait_for_socket(&api_socket, Duration::from_secs(10));
@@ -641,12 +641,12 @@ fn auto_detect_respects_nested_guard_before_auto_attach() {
         .map(|workspaces| workspaces.len())
         .unwrap_or(0);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_herdr"))
+    let output = Command::new(env!("CARGO_BIN_EXE_mastr"))
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
-        .env("HERDR_SOCKET_PATH", &api_socket)
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env("HERDR_ENV", "1")
+        .env("MASTR_SOCKET_PATH", &api_socket)
+        .env_remove("MASTR_CLIENT_SOCKET_PATH")
+        .env("MASTR_ENV", "1")
         .output()
         .unwrap();
 

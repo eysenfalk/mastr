@@ -24,7 +24,7 @@ pub(super) fn unique_test_dir() -> PathBuf {
 }
 
 pub(super) fn managed_github_plugin_dir(config_home: &Path) -> PathBuf {
-    config_home.join("herdr-dev").join("plugins").join("github")
+    config_home.join("mastr-dev").join("plugins").join("github")
 }
 
 pub(super) fn path_missing_or_empty(path: &Path) -> bool {
@@ -146,9 +146,9 @@ pub(super) fn spawn_herdr_with_pane_history(
 
 pub(super) fn app_dir_name() -> &'static str {
     if cfg!(debug_assertions) {
-        "herdr-dev"
+        "mastr-dev"
     } else {
-        "herdr"
+        "mastr"
     }
 }
 
@@ -157,7 +157,7 @@ pub(super) fn named_session_socket(config_home: &Path, session: &str) -> PathBuf
         .join(app_dir_name())
         .join("sessions")
         .join(session)
-        .join("herdr.sock")
+        .join("mastr.sock")
 }
 
 pub(super) fn spawn_named_server(
@@ -174,14 +174,14 @@ pub(super) fn spawn_named_server(
     )
     .unwrap();
 
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
     command
         .args(["--session", session, "server"])
         .env("XDG_CONFIG_HOME", config_home)
         .env("XDG_RUNTIME_DIR", runtime_dir)
-        .env_remove("HERDR_SOCKET_PATH")
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_ENV")
+        .env_remove("MASTR_SOCKET_PATH")
+        .env_remove("MASTR_CLIENT_SOCKET_PATH")
+        .env_remove("MASTR_ENV")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
@@ -224,20 +224,20 @@ pub(super) fn run_named_cli_with_env_and_socket_override(
     envs: &[(&str, &Path)],
     socket_override: Option<&Path>,
 ) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
     command
         .args(args)
         .env("XDG_CONFIG_HOME", config_home)
         .env("XDG_RUNTIME_DIR", runtime_dir)
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_ENV");
+        .env_remove("MASTR_CLIENT_SOCKET_PATH")
+        .env_remove("MASTR_ENV");
     for (key, value) in envs {
         command.env(key, value);
     }
     if let Some(socket_override) = socket_override {
-        command.env("HERDR_SOCKET_PATH", socket_override);
+        command.env("MASTR_SOCKET_PATH", socket_override);
     } else {
-        command.env_remove("HERDR_SOCKET_PATH");
+        command.env_remove("MASTR_SOCKET_PATH");
     }
     command.output().unwrap()
 }
@@ -299,14 +299,14 @@ pub(super) fn spawn_herdr_with_config(
         })
         .unwrap();
 
-    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_mastr"));
     cmd.arg("server");
     cmd.env("XDG_CONFIG_HOME", config_home);
     cmd.env("XDG_RUNTIME_DIR", runtime_dir);
-    cmd.env("HERDR_SOCKET_PATH", socket_path);
-    cmd.env_remove("HERDR_CLIENT_SOCKET_PATH");
+    cmd.env("MASTR_SOCKET_PATH", socket_path);
+    cmd.env_remove("MASTR_CLIENT_SOCKET_PATH");
     cmd.env("SHELL", "/bin/sh");
-    cmd.env_remove("HERDR_ENV");
+    cmd.env_remove("MASTR_ENV");
     if let Some(path) = path_override {
         cmd.env("PATH", path);
     }
@@ -320,9 +320,9 @@ pub(super) fn spawn_herdr_with_config(
 }
 
 pub(super) fn run_cli(socket_path: &Path, args: &[&str]) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
     command.args(args);
-    command.env("HERDR_SOCKET_PATH", socket_path);
+    command.env("MASTR_SOCKET_PATH", socket_path);
     command.output().unwrap()
 }
 
@@ -331,10 +331,10 @@ pub(super) fn run_cli_in_dir(
     args: &[&str],
     current_dir: &Path,
 ) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
     command.args(args);
     command.current_dir(current_dir);
-    command.env("HERDR_SOCKET_PATH", socket_path);
+    command.env("MASTR_SOCKET_PATH", socket_path);
     command.output().unwrap()
 }
 

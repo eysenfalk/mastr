@@ -29,7 +29,7 @@ fn init_repo_with_commit(repo: &Path) {
 
 pub(crate) fn create_repo_with_linked_worktree(name: &str) -> (PathBuf, PathBuf, PathBuf) {
     let base = temp_test_dir(name);
-    let repo = base.join("herdr");
+    let repo = base.join("mastr");
     let checkout = base.join("testr56");
     init_repo_with_commit(&repo);
     run_git(

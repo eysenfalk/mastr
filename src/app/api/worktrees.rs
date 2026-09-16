@@ -1225,7 +1225,7 @@ mod tests {
                 source_checkout_path: repo.clone(),
                 source_repo_root: repo.clone(),
                 repo_key: "repo-key".into(),
-                repo_name: "herdr".into(),
+                repo_name: "mastr".into(),
                 label: None,
                 focus: false,
                 respond_to,
@@ -2347,7 +2347,7 @@ mod tests {
         let checkout = PathBuf::from("/repo/herdr-issue");
         let membership = crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: "/repo/herdr".into(),
             checkout_path: checkout.clone(),
             is_linked_worktree: true,
@@ -2420,7 +2420,7 @@ mod tests {
         let mut child = Workspace::test_new("child");
         child.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: "/repo/herdr".into(),
             checkout_path: checkout.clone(),
             is_linked_worktree: true,
@@ -2441,7 +2441,7 @@ mod tests {
             .insert(child_pane_id, 1);
         app.state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: "/repo/herdr".into(),
             checkout_path: "/repo/other".into(),
             is_linked_worktree: true,

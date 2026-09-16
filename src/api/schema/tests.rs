@@ -188,7 +188,7 @@ fn generated_protocol_schema_artifact_is_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("docs/next/api/herdr-api.schema.json");
 
-    if std::env::var_os("HERDR_UPDATE_API_SCHEMA").is_some() {
+    if std::env::var_os("MASTR_UPDATE_API_SCHEMA").is_some() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &actual).unwrap();
         return;
@@ -196,13 +196,13 @@ fn generated_protocol_schema_artifact_is_current() {
 
     let expected = std::fs::read_to_string(&path).unwrap_or_else(|err| {
         panic!(
-            "failed to read {}; run `HERDR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`: {err}",
+            "failed to read {}; run `MASTR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`: {err}",
             path.display()
         )
     });
     assert_eq!(
         expected, actual,
-        "generated API schema artifact is stale; run `HERDR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`"
+        "generated API schema artifact is stale; run `MASTR_UPDATE_API_SCHEMA=1 just test-one generated_protocol_schema_artifact_is_current`"
     );
 }
 

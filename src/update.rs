@@ -1,7 +1,7 @@
 //! Self-update mechanism.
 //!
 //! Checks the hosted herdr.dev update manifest for newer versions.
-//! Manual `herdr update` downloads and installs the binary.
+//! Manual `mastr update` downloads and installs the binary.
 //! Background checks only surface availability and release notes.
 //! Uses `curl` as a subprocess for HTTP — no additional Rust HTTP dependencies.
 //! JSON parsing uses serde_json (already in deps for persistence).
@@ -25,13 +25,13 @@ use serde::{Deserialize, Deserializer};
 const STABLE_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/latest.json";
 const PREVIEW_UPDATE_MANIFEST_URL: &str = "https://herdr.dev/preview.json";
 const HOMEBREW_FORMULA_API_URL: &str = "https://formulae.brew.sh/api/formula/herdr.json";
-const HERDR_UPDATE_COMMAND: &str = "herdr update";
+const MASTR_UPDATE_COMMAND: &str = "mastr update";
 const HOMEBREW_UPDATE_COMMAND: &str = "brew update && brew upgrade herdr";
 const MISE_UPDATE_COMMAND: &str = "mise upgrade herdr";
 const NIX_UPDATE_COMMAND: &str = "update through Nix";
 const MISE_INSTALLS_DIR_ENV: &str = "MISE_INSTALLS_DIR";
-const FAKE_UPDATE_VERSION_ENV: &str = "HERDR_FAKE_UPDATE_VERSION";
-const FAKE_UPDATE_NOTES_VERSION_ENV: &str = "HERDR_FAKE_UPDATE_NOTES_VERSION";
+const FAKE_UPDATE_VERSION_ENV: &str = "MASTR_FAKE_UPDATE_VERSION";
+const FAKE_UPDATE_NOTES_VERSION_ENV: &str = "MASTR_FAKE_UPDATE_NOTES_VERSION";
 const DEFAULT_FAKE_UPDATE_NOTES_VERSION: &str = "0.3.0";
 #[cfg(not(windows))]
 const SERVER_STOP_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -786,7 +786,7 @@ fn install_windows_update_with_installer(
 
 #[cfg(windows)]
 fn windows_installed_herdr_exe_path() -> Result<PathBuf, String> {
-    if let Some(install_dir) = env::var_os("HERDR_INSTALL_DIR").filter(|value| !value.is_empty()) {
+    if let Some(install_dir) = env::var_os("MASTR_INSTALL_DIR").filter(|value| !value.is_empty()) {
         return Ok(PathBuf::from(install_dir).join("herdr.exe"));
     }
 
@@ -794,7 +794,7 @@ fn windows_installed_herdr_exe_path() -> Result<PathBuf, String> {
         .ok_or("LOCALAPPDATA is not set; cannot locate Herdr install")?;
     Ok(PathBuf::from(local_app_data)
         .join("Programs")
-        .join("Herdr")
+        .join("Mastr")
         .join("bin")
         .join("herdr.exe"))
 }
@@ -804,11 +804,11 @@ fn windows_installed_herdr_exe_path() -> Result<PathBuf, String> {
 // ---------------------------------------------------------------------------
 
 fn running_inside_herdr_env(herdr_env: Option<&str>) -> bool {
-    herdr_env == Some(crate::HERDR_ENV_VALUE)
+    herdr_env == Some(crate::MASTR_ENV_VALUE)
 }
 
 fn running_inside_herdr() -> bool {
-    running_inside_herdr_env(env::var(crate::HERDR_ENV_VAR).ok().as_deref())
+    running_inside_herdr_env(env::var(crate::MASTR_ENV_VAR).ok().as_deref())
 }
 
 #[cfg(not(windows))]
@@ -961,7 +961,7 @@ fn plan_running_server_updates(
         )
         .map_err(|err| {
             format!(
-                "failed to read status for herdr target {} at {}: {err}. stop it with `{}` and run `herdr update` again",
+                "failed to read status for herdr target {} at {}: {err}. stop it with `{}` and run `mastr update` again",
                 target.label,
                 target.socket_path.display(),
                 target.stop_command
@@ -970,7 +970,7 @@ fn plan_running_server_updates(
             Some(server) => server,
             None if target.must_be_running => {
                 return Err(format!(
-                        "herdr target {} looked running, but its status API did not respond at {}. stop it with `{}` and run `herdr update` again",
+                        "herdr target {} looked running, but its status API did not respond at {}. stop it with `{}` and run `mastr update` again",
                     target.label,
                     target.socket_path.display(),
                     target.stop_command
@@ -978,7 +978,7 @@ fn plan_running_server_updates(
             }
             None if client_protocol_server_is_running_at(&target.client_socket_path) => {
                 return Err(format!(
-                    "herdr target {} has a client socket, but its status API did not respond at {}. stop it with `{}` and run `herdr update` again",
+                    "herdr target {} has a client socket, but its status API did not respond at {}. stop it with `{}` and run `mastr update` again",
                     target.label,
                     target.socket_path.display(),
                     target.stop_command
@@ -996,7 +996,7 @@ fn plan_running_server_updates(
 
     if plans.is_empty() && target_client_protocol_server_is_running()? {
         return Err(format!(
-            "a herdr server is listening, but its status API is unavailable; try `{}`, or stop the old server process manually, then run `herdr update` again",
+            "a mastr server is listening, but its status API is unavailable; try `{}`, or stop the old server process manually, then run `mastr update` again",
             crate::session::local_stop_command()
         ));
     }
@@ -1037,7 +1037,7 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
             name: None,
             label: socket_path.display().to_string(),
             stop_command: format!(
-                "{}={} herdr server stop",
+                "{}={} mastr server stop",
                 crate::api::SOCKET_PATH_ENV_VAR,
                 socket_path.display()
             ),
@@ -1052,7 +1052,7 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
     }
 
     let sessions = crate::session::list_sessions()
-        .map_err(|err| format!("failed to list herdr sessions: {err}"))?;
+        .map_err(|err| format!("failed to list mastr sessions: {err}"))?;
     Ok(sessions
         .into_iter()
         .map(|session| RunningUpdateTarget {
@@ -1067,9 +1067,9 @@ fn running_update_targets() -> Result<Vec<RunningUpdateTarget>, String> {
                 Some(&session.name)
             }),
             attach_command: Some(if session.default {
-                "herdr".to_string()
+                "mastr".to_string()
             } else {
-                format!("herdr session attach {}", session.name)
+                format!("mastr session attach {}", session.name)
             }),
             label: session.name.clone(),
             client_socket_path: crate::session::client_socket_path_for(if session.default {
@@ -1092,7 +1092,7 @@ fn target_client_protocol_server_is_running() -> Result<bool, String> {
     }
 
     let sessions = crate::session::list_sessions()
-        .map_err(|err| format!("failed to list herdr sessions: {err}"))?;
+        .map_err(|err| format!("failed to list mastr sessions: {err}"))?;
     Ok(sessions.into_iter().any(|session| {
         let client_socket = crate::session::client_socket_path_for(if session.default {
             None
@@ -1114,7 +1114,7 @@ pub(crate) fn parse_self_update_args(args: &[String]) -> Result<SelfUpdateOption
         match arg.as_str() {
             "--handoff" => options.live_handoff = true,
             "--help" | "-h" => {
-                return Err("usage: herdr update [--handoff]".to_string());
+                return Err("usage: mastr update [--handoff]".to_string());
             }
             _ => return Err(format!("unknown update option: {arg}")),
         }
@@ -1129,7 +1129,7 @@ fn prompt_to_stop_old_servers_before_update(
 ) -> Result<bool, String> {
     if !io::stdin().is_terminal() {
         return Err(
-            "one or more Herdr sessions must stop for this update. Stop running Herdr sessions when ready, then run `herdr update` again from an interactive terminal."
+            "one or more Herdr sessions must stop for this update. Stop running Herdr sessions when ready, then run `mastr update` again from an interactive terminal."
                 .to_string(),
         );
     }
@@ -1472,13 +1472,13 @@ fn recover_failed_live_handoff_for_update(
         FailedHandoffServerState::NoServerResponding => {
             if let Some(command) = plan.attach_command() {
                 eprintln!(
-                    "no herdr server is responding for session {}. the binary was updated; run `{command}` to start {}.",
+                    "no mastr server is responding for session {}. the binary was updated; run `{command}` to start {}.",
                     plan.label(),
                     release.label()
                 );
             } else {
                 eprintln!(
-                    "no herdr server is responding at {}. the binary was updated; restart with the same socket override to use {}.",
+                    "no mastr server is responding at {}. the binary was updated; restart with the same socket override to use {}.",
                     plan.socket_path().display(),
                     release.label()
                 );
@@ -1892,14 +1892,14 @@ pub(crate) fn update_install_command() -> &'static str {
     } else if is_nix_managed_install() {
         NIX_UPDATE_COMMAND
     } else {
-        HERDR_UPDATE_COMMAND
+        MASTR_UPDATE_COMMAND
     }
 }
 
 pub(crate) fn update_install_instruction(install_command: &str) -> String {
     match install_command {
-        HERDR_UPDATE_COMMAND => {
-            "detach, run `herdr update`, then run Herdr again to reconnect".to_string()
+        MASTR_UPDATE_COMMAND => {
+            "detach, run `mastr update`, then run Herdr again to reconnect".to_string()
         }
         HOMEBREW_UPDATE_COMMAND => {
             "detach, run `brew update && brew upgrade herdr`, then run Herdr again to reconnect"
@@ -2051,7 +2051,7 @@ fn mise_install_root_under_named_installs_dir(path: &Path) -> Option<PathBuf> {
 }
 
 fn mise_tool_version_dir(path: &Path) -> Option<&Path> {
-    if path.file_name()? != "herdr" {
+    if path.file_name()? != "mastr" {
         return None;
     }
     let bin_dir = path.parent()?;
@@ -2060,7 +2060,7 @@ fn mise_tool_version_dir(path: &Path) -> Option<&Path> {
     }
     let version_dir = bin_dir.parent()?;
     let tool_dir = version_dir.parent()?;
-    if tool_dir.file_name()? != "herdr" {
+    if tool_dir.file_name()? != "mastr" {
         return None;
     }
     Some(version_dir)
@@ -2085,7 +2085,7 @@ fn is_homebrew_managed_exe_path(path: &Path) -> bool {
 }
 
 fn homebrew_cellar_keg_root(path: &Path) -> Option<PathBuf> {
-    if path.file_name()? != "herdr" {
+    if path.file_name()? != "mastr" {
         return None;
     }
     let bin_dir = path.parent()?;
@@ -2094,7 +2094,7 @@ fn homebrew_cellar_keg_root(path: &Path) -> Option<PathBuf> {
     }
     let version_dir = bin_dir.parent()?;
     let formula_dir = version_dir.parent()?;
-    if formula_dir.file_name()? != "herdr" {
+    if formula_dir.file_name()? != "mastr" {
         return None;
     }
     let cellar_dir = formula_dir.parent()?;
@@ -2108,8 +2108,9 @@ fn homebrew_cellar_keg_root(path: &Path) -> Option<PathBuf> {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Manual self-update command (`herdr update`).
+/// Manual self-update command (`mastr update`).
 pub fn self_update(options: SelfUpdateOptions) -> Result<Version, String> {
+    crate::product::require_release_source()?;
     let channel = UpdateChannel::configured();
 
     if is_homebrew_managed_install() {
@@ -2146,7 +2147,7 @@ pub fn self_update(options: SelfUpdateOptions) -> Result<Version, String> {
     }
 
     if running_inside_herdr() {
-        return Err("run `herdr update` outside herdr after detaching from the session".into());
+        return Err("run `mastr update` outside herdr after detaching from the session".into());
     }
 
     eprintln!("checking {} channel for updates...", channel.as_str());
@@ -2206,7 +2207,7 @@ pub fn self_update(options: SelfUpdateOptions) -> Result<Version, String> {
             && !prompt_to_complete_plain_update(&server_update_decisions, &release)?
         {
             eprintln!("Herdr was not updated.");
-            eprintln!("Stop running Herdr sessions when ready, then run `herdr update` again.");
+            eprintln!("Stop running Herdr sessions when ready, then run `mastr update` again.");
             return Ok(current);
         }
         install_downloaded_update(downloaded_update)?;
@@ -2242,6 +2243,9 @@ fn print_outdated_integration_notice_with_updated_binary(updated_exe: &Path) {
 /// Background update check: only surface availability and release notes.
 /// Runs in a background thread at startup.
 pub fn auto_update(events: tokio::sync::mpsc::Sender<crate::events::AppEvent>) {
+    if crate::product::require_release_source().is_err() {
+        return;
+    }
     crate::logging::update_check_started();
     if let Ok(version) = env::var(FAKE_UPDATE_VERSION_ENV) {
         let version = version.trim();
@@ -2531,57 +2535,57 @@ mod tests {
 
     #[test]
     fn homebrew_cellar_path_is_detected() {
-        let path = Path::new("/opt/homebrew/Cellar/herdr/0.5.9/bin/herdr");
+        let path = Path::new("/opt/homebrew/Cellar/mastr/0.5.9/bin/mastr");
 
         assert!(is_homebrew_managed_exe_path(path));
         assert_eq!(
             homebrew_cellar_keg_root(path).unwrap(),
-            PathBuf::from("/opt/homebrew/Cellar/herdr/0.5.9")
+            PathBuf::from("/opt/homebrew/Cellar/mastr/0.5.9")
         );
     }
 
     #[test]
     fn homebrew_linux_cellar_path_is_detected() {
-        let path = Path::new("/home/linuxbrew/.linuxbrew/Cellar/herdr/0.5.9/bin/herdr");
+        let path = Path::new("/home/linuxbrew/.linuxbrew/Cellar/mastr/0.5.9/bin/mastr");
 
         assert!(is_homebrew_managed_exe_path(path));
     }
 
     #[test]
     fn homebrew_opt_path_requires_canonicalized_cellar_target() {
-        let path = Path::new("/opt/homebrew/opt/herdr/bin/herdr");
+        let path = Path::new("/opt/homebrew/opt/mastr/bin/mastr");
 
         assert!(!is_homebrew_managed_exe_path(path));
     }
 
     #[test]
     fn non_homebrew_path_is_not_detected() {
-        let path = Path::new("/usr/local/bin/herdr");
+        let path = Path::new("/usr/local/bin/mastr");
 
         assert!(!is_homebrew_managed_exe_path(path));
     }
 
     #[test]
     fn mise_install_path_is_detected() {
-        let path = Path::new("/home/user/.local/share/mise/installs/herdr/0.6.6/bin/herdr");
+        let path = Path::new("/home/user/.local/share/mise/installs/mastr/0.6.6/bin/mastr");
 
         assert!(is_mise_managed_exe_path(path));
         assert_eq!(
             mise_install_root(path).unwrap(),
-            PathBuf::from("/home/user/.local/share/mise/installs/herdr/0.6.6")
+            PathBuf::from("/home/user/.local/share/mise/installs/mastr/0.6.6")
         );
     }
 
     #[test]
     fn mise_alias_install_path_is_detected() {
-        let path = Path::new("/home/user/.local/share/mise/installs/herdr/latest/bin/herdr");
+        let path = Path::new("/home/user/.local/share/mise/installs/mastr/latest/bin/mastr");
 
         assert!(is_mise_managed_exe_path(path));
     }
 
     #[test]
     fn mise_custom_installs_dir_path_is_detected() {
-        let path = Path::new("/opt/mise-tools/installs/herdr/0.6.6/bin/herdr");
+        let path = Path::new("/opt/mise-tools/installs/mastr/0.6.6/bin/mastr");
 
         assert!(is_mise_managed_exe_path(path));
     }
@@ -2591,12 +2595,12 @@ mod tests {
         let _guard = env_lock().lock().unwrap();
         let previous = std::env::var_os(MISE_INSTALLS_DIR_ENV);
         std::env::set_var(MISE_INSTALLS_DIR_ENV, "/opt/mise-tools");
-        let path = Path::new("/opt/mise-tools/herdr/0.6.6/bin/herdr");
+        let path = Path::new("/opt/mise-tools/mastr/0.6.6/bin/mastr");
 
         assert!(is_mise_managed_exe_path(path));
         assert_eq!(
             mise_install_root(path).unwrap(),
-            PathBuf::from("/opt/mise-tools/herdr/0.6.6")
+            PathBuf::from("/opt/mise-tools/mastr/0.6.6")
         );
 
         if let Some(previous) = previous {
@@ -2608,7 +2612,7 @@ mod tests {
 
     #[test]
     fn non_mise_install_path_is_not_detected() {
-        let path = Path::new("/home/user/.local/bin/herdr");
+        let path = Path::new("/home/user/.local/bin/mastr");
 
         assert!(!is_mise_managed_exe_path(path));
     }
@@ -2621,12 +2625,12 @@ mod tests {
                 "herdr-homebrew-symlink-test-{}",
                 std::process::id()
             ));
-            let cellar_bin = root.join("Cellar/herdr/0.6.2/bin");
-            let opt_bin = root.join("opt/herdr/bin");
+            let cellar_bin = root.join("Cellar/mastr/0.6.2/bin");
+            let opt_bin = root.join("opt/mastr/bin");
             fs::create_dir_all(&cellar_bin).unwrap();
             fs::create_dir_all(&opt_bin).unwrap();
-            let cellar_binary = cellar_bin.join("herdr");
-            let opt_binary = opt_bin.join("herdr");
+            let cellar_binary = cellar_bin.join("mastr");
+            let opt_binary = opt_bin.join("mastr");
             fs::write(&cellar_binary, b"").unwrap();
             std::os::unix::fs::symlink(&cellar_binary, &opt_binary).unwrap();
 
@@ -2642,12 +2646,12 @@ mod tests {
         {
             let root = std::env::temp_dir()
                 .join(format!("herdr-mise-symlink-test-{}", std::process::id()));
-            let version_bin = root.join("installs/herdr/0.6.2/bin");
-            let latest_bin = root.join("installs/herdr/latest/bin");
+            let version_bin = root.join("installs/mastr/0.6.2/bin");
+            let latest_bin = root.join("installs/mastr/latest/bin");
             fs::create_dir_all(&version_bin).unwrap();
             fs::create_dir_all(&latest_bin).unwrap();
-            let version_binary = version_bin.join("herdr");
-            let latest_binary = latest_bin.join("herdr");
+            let version_binary = version_bin.join("mastr");
+            let latest_binary = latest_bin.join("mastr");
             fs::write(&version_binary, b"").unwrap();
             std::os::unix::fs::symlink(&version_binary, &latest_binary).unwrap();
 
@@ -2659,7 +2663,7 @@ mod tests {
 
     #[test]
     fn nix_store_path_is_detected() {
-        let path = Path::new("/nix/store/abc123-herdr-0.6.1/bin/herdr");
+        let path = Path::new("/nix/store/abc123-herdr-0.6.1/bin/mastr");
 
         assert!(is_nix_store_exe_path(path));
         assert!(is_package_manager_managed_exe_path(path));
@@ -2667,10 +2671,10 @@ mod tests {
 
     #[test]
     fn preview_channel_is_rejected_for_package_manager_paths() {
-        let homebrew = Path::new("/opt/homebrew/Cellar/herdr/0.6.6/bin/herdr");
-        let mise = Path::new("/home/user/.local/share/mise/installs/herdr/0.6.6/bin/herdr");
-        let nix = Path::new("/nix/store/abc123-herdr-0.6.6/bin/herdr");
-        let direct = Path::new("/home/user/.local/bin/herdr");
+        let homebrew = Path::new("/opt/homebrew/Cellar/mastr/0.6.6/bin/mastr");
+        let mise = Path::new("/home/user/.local/share/mise/installs/mastr/0.6.6/bin/mastr");
+        let nix = Path::new("/nix/store/abc123-herdr-0.6.6/bin/mastr");
+        let direct = Path::new("/home/user/.local/bin/mastr");
 
         assert!(preview_channel_rejection_for_exe_path(homebrew)
             .is_some_and(|message| message.contains("Homebrew")));
@@ -2683,7 +2687,7 @@ mod tests {
 
     #[test]
     fn non_nix_store_path_is_not_detected() {
-        let path = Path::new("/usr/local/bin/herdr");
+        let path = Path::new("/usr/local/bin/mastr");
 
         assert!(!is_nix_store_exe_path(path));
     }
@@ -2754,8 +2758,8 @@ mod tests {
     #[test]
     fn update_install_instruction_distinguishes_install_from_restart() {
         assert_eq!(
-            update_install_instruction(HERDR_UPDATE_COMMAND),
-            "detach, run `herdr update`, then run Herdr again to reconnect"
+            update_install_instruction(MASTR_UPDATE_COMMAND),
+            "detach, run `mastr update`, then run Herdr again to reconnect"
         );
         assert_eq!(
             update_install_instruction(HOMEBREW_UPDATE_COMMAND),
@@ -2792,7 +2796,7 @@ mod tests {
 
     #[test]
     fn running_inside_herdr_env_requires_marker() {
-        assert!(running_inside_herdr_env(Some(crate::HERDR_ENV_VALUE)));
+        assert!(running_inside_herdr_env(Some(crate::MASTR_ENV_VALUE)));
         assert!(!running_inside_herdr_env(None));
         assert!(!running_inside_herdr_env(Some("0")));
     }
@@ -2909,8 +2913,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "mastr session stop work".to_string(),
+                attach_command: Some("mastr session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,
@@ -2983,7 +2987,7 @@ mod tests {
         std::env::remove_var(crate::session::SESSION_ENV_VAR);
         crate::session::clear_explicit_session_for_test();
         let args = vec![
-            "herdr".to_string(),
+            "mastr".to_string(),
             "--session".to_string(),
             "work".to_string(),
             "update".to_string(),
@@ -3052,7 +3056,7 @@ mod tests {
             "unexpected error: {err}"
         );
         assert!(
-            err.contains("herdr session stop work"),
+            err.contains("mastr session stop work"),
             "unexpected error: {err}"
         );
     }
@@ -3131,8 +3135,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "mastr session stop work".to_string(),
+                attach_command: Some("mastr session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,
@@ -3167,8 +3171,8 @@ mod tests {
             target: RunningUpdateTarget {
                 name: Some("work".to_string()),
                 label: "work".to_string(),
-                stop_command: "herdr session stop work".to_string(),
-                attach_command: Some("herdr session attach work".to_string()),
+                stop_command: "mastr session stop work".to_string(),
+                attach_command: Some("mastr session attach work".to_string()),
                 socket_path: crate::session::api_socket_path_for(Some("work")),
                 client_socket_path: crate::session::client_socket_path_for(Some("work")),
                 must_be_running: true,

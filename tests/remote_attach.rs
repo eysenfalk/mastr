@@ -105,7 +105,7 @@ exit 255
 
     let inherited_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{inherited_path}", temp_dir.display());
-    let child = Command::new(env!("CARGO_BIN_EXE_herdr"))
+    let child = Command::new(env!("CARGO_BIN_EXE_mastr"))
         .args(["--remote", "check-host"])
         .env("PATH", path)
         .env("FAKE_SSH_FRAMED", if framed_shell { "1" } else { "0" })
@@ -113,12 +113,12 @@ exit 255
         .env("FAKE_SSH_APPROVED", &approval_path)
         .env("FAKE_SSH_ADVANCED", &advanced_path)
         .env("FAKE_SSH_FIRST_DONE", &first_done_path)
-        .env("HERDR_CONFIG_PATH", temp_dir.join("config.toml"))
-        .env_remove("HERDR_ENV")
-        .env_remove("HERDR_SESSION")
-        .env_remove("HERDR_SOCKET_PATH")
-        .env_remove("HERDR_CLIENT_SOCKET_PATH")
-        .env_remove("HERDR_REMOTE_BINARY")
+        .env("MASTR_CONFIG_PATH", temp_dir.join("config.toml"))
+        .env_remove("MASTR_ENV")
+        .env_remove("MASTR_SESSION")
+        .env_remove("MASTR_SOCKET_PATH")
+        .env_remove("MASTR_CLIENT_SOCKET_PATH")
+        .env_remove("MASTR_REMOTE_BINARY")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

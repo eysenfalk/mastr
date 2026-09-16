@@ -1000,7 +1000,7 @@ mod tests {
             std::env::temp_dir().join(format!("herdr-missing-worktree-{}", std::process::id()));
         let membership = crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: missing.join("repo"),
             checkout_path: missing.join("checkout"),
             is_linked_worktree: true,

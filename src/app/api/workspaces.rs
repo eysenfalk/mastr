@@ -562,7 +562,7 @@ mod tests {
         app.state.workspaces = vec![Workspace::test_new("issue")];
         app.state.workspaces[0].worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: "/repo/herdr".into(),
             checkout_path: "/repo/herdr-issue".into(),
             is_linked_worktree: true,
@@ -575,7 +575,7 @@ mod tests {
         let mut parent = Workspace::test_new("parent");
         parent.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
             key: "repo-key".into(),
-            label: "herdr".into(),
+            label: "mastr".into(),
             repo_root: "/repo/herdr".into(),
             checkout_path: "/repo/herdr".into(),
             is_linked_worktree: false,

@@ -1,7 +1,7 @@
 // installed by herdr
 // managed by herdr; reinstalling or updating the integration overwrites this file.
-// HERDR_INTEGRATION_ID=opencode-tui
-// HERDR_INTEGRATION_VERSION=12
+// MASTR_INTEGRATION_ID=opencode-tui
+// MASTR_INTEGRATION_VERSION=12
 
 import net from "node:net";
 
@@ -11,8 +11,8 @@ const ROUTE_POLL_INTERVAL_MS = 100;
 const SELECTION_RETRY_DELAYS_MS = [100, 400, 1_000];
 
 function requestOnce(sessionID, state, seq, isCurrent = () => true) {
-  const paneId = process.env.HERDR_PANE_ID;
-  const socketPath = process.env.HERDR_SOCKET_PATH;
+  const paneId = process.env.MASTR_PANE_ID;
+  const socketPath = process.env.MASTR_SOCKET_PATH;
   if (!paneId || !socketPath) {
     return Promise.resolve(true);
   }
@@ -69,9 +69,9 @@ export default {
   setup,
   tui: async (api) => {
     if (
-      process.env.HERDR_ENV !== "1" ||
-      !process.env.HERDR_SOCKET_PATH ||
-      !process.env.HERDR_PANE_ID
+      process.env.MASTR_ENV !== "1" ||
+      !process.env.MASTR_SOCKET_PATH ||
+      !process.env.MASTR_PANE_ID
     ) {
       return;
     }
@@ -128,7 +128,7 @@ export default {
 };
 
 function setup(api) {
-  if (process.env.HERDR_ENV !== "1" || !process.env.HERDR_SOCKET_PATH || !process.env.HERDR_PANE_ID) return;
+  if (process.env.MASTR_ENV !== "1" || !process.env.MASTR_SOCKET_PATH || !process.env.MASTR_PANE_ID) return;
 
   let disposed = false;
   let selected;

@@ -14,7 +14,7 @@ use super::{agent_label, parse_agent_label, Agent};
 
 pub(crate) const MANIFEST_ENGINE_VERSION: u32 = 3;
 const DEFAULT_CATALOG_URL: &str = "https://herdr.dev/agent-detection/index.toml";
-const CATALOG_URL_ENV: &str = "HERDR_AGENT_DETECTION_MANIFEST_CATALOG_URL";
+const CATALOG_URL_ENV: &str = "MASTR_AGENT_DETECTION_MANIFEST_CATALOG_URL";
 const MAX_FETCH_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone)]
@@ -166,7 +166,16 @@ struct CatalogAgent {
 }
 
 pub(crate) fn auto_update(events: tokio::sync::mpsc::Sender<crate::events::AppEvent>) {
-    let result = check_and_update();
+    if crate::product::require_release_source().is_err() {
+        return;
+    }
+    apply_update_result(events, check_and_update());
+}
+
+fn apply_update_result(
+    events: tokio::sync::mpsc::Sender<crate::events::AppEvent>,
+    result: Result<ManifestUpdateOutput, String>,
+) {
     let status = match result {
         Ok(output) => {
             let activated = agents_needing_cache_reload(&output);
@@ -233,6 +242,7 @@ pub(crate) struct ManifestUpdateOutput {
 }
 
 pub(crate) fn check_and_update() -> Result<ManifestUpdateOutput, String> {
+    crate::product::require_release_source()?;
     check_and_update_from_url(&catalog_url())
 }
 
@@ -710,7 +720,7 @@ path = "codex.toml"
             );
 
             let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-            auto_update(tx);
+            apply_update_result(tx, check_and_update_from_url(&catalog_url()));
 
             let event = rx.try_recv().expect("manifest update event");
             let crate::events::AppEvent::AgentDetectionManifestsUpdated { updated, .. } = event
@@ -780,7 +790,7 @@ path = "codex.toml"
             );
 
             let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-            auto_update(tx);
+            apply_update_result(tx, check_and_update_from_url(&catalog_url()));
 
             let event = rx.try_recv().expect("manifest update event");
             let crate::events::AppEvent::AgentDetectionManifestsUpdated { updated, .. } = event
@@ -858,7 +868,7 @@ path = "missing-cursor.toml"
             );
 
             let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-            auto_update(tx);
+            apply_update_result(tx, check_and_update_from_url(&catalog_url()));
 
             let event = rx.try_recv().expect("manifest update event");
             let crate::events::AppEvent::AgentDetectionManifestsUpdated {
