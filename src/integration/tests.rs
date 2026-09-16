@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 fn windows_powershell_encoded_hook_command_preserves_script_invocation() {
     use base64::Engine;
 
-    let hook_path = Path::new(r"C:\Users\O'Neil λ\App Data\hooks\herdr-agent-state.ps1");
+    let hook_path = Path::new(r"C:\Users\O'Neil λ\App Data\hooks\mastr-agent-state.ps1");
     let command = powershell_encoded_hook_command(hook_path, "session");
     let encoded = command
         .strip_prefix("powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ")
@@ -33,14 +33,14 @@ fn windows_powershell_encoded_hook_command_preserves_script_invocation() {
     assert!(chunks.remainder().is_empty(), "UTF-16LE payload");
     assert_eq!(
         String::from_utf16(&utf16).expect("PowerShell script"),
-        r"& 'C:\Users\O''Neil λ\App Data\hooks\herdr-agent-state.ps1' session"
+        r"& 'C:\Users\O''Neil λ\App Data\hooks\mastr-agent-state.ps1' session"
     );
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_antigravity_cli_hook_command_uses_encoded_powershell() {
-    let hook_path = Path::new(r"C:\Users\reporter\.gemini\config\hooks\herdr-agent-state.ps1");
+    let hook_path = Path::new(r"C:\Users\reporter\.gemini\config\hooks\mastr-agent-state.ps1");
     assert_eq!(
         antigravity_cli_hook_command(hook_path, "session"),
         powershell_encoded_hook_command(hook_path, "session")
@@ -512,7 +512,7 @@ fn integration_recommendation_installs_available_or_outdated_targets() {
         label: "claude",
         command: "claude",
         available: false,
-        path: PathBuf::from("/tmp/herdr-agent-state.sh"),
+        path: PathBuf::from("/tmp/mastr-agent-state.sh"),
         state: IntegrationStatusKind::NotInstalled,
     };
     assert!(!recommendation.needs_install());
@@ -850,7 +850,7 @@ fn outdated_integrations_detect_previous_pi_version() {
     let extension_path = ext_dir.join(PI_EXTENSION_INSTALL_NAME);
     fs::write(
         &extension_path,
-        "// HERDR_INTEGRATION_ID=pi\n// HERDR_INTEGRATION_VERSION=4\n",
+        "// MASTR_INTEGRATION_ID=pi\n// MASTR_INTEGRATION_VERSION=4\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -880,7 +880,7 @@ fn outdated_integrations_detect_previous_omp_version() {
     let extension_path = ext_dir.join(OMP_EXTENSION_INSTALL_NAME);
     fs::write(
         &extension_path,
-        "// HERDR_INTEGRATION_ID=omp\n// HERDR_INTEGRATION_VERSION=4\n",
+        "// MASTR_INTEGRATION_ID=omp\n// MASTR_INTEGRATION_VERSION=4\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -1117,7 +1117,7 @@ fn claude_v9_integration_status_is_outdated_until_reinstalled() {
     let hook_path = claude_hooks_dir.join(CLAUDE_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=claude\n# HERDR_INTEGRATION_VERSION=9\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=claude\n# MASTR_INTEGRATION_VERSION=9\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -1156,7 +1156,7 @@ fn claude_v2_integration_status_is_outdated() {
     let hook_path = claude_hooks_dir.join(CLAUDE_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=claude\n# HERDR_INTEGRATION_VERSION=2\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=claude\n# MASTR_INTEGRATION_VERSION=2\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -1289,7 +1289,7 @@ fn codex_v2_integration_status_is_outdated() {
     let hook_path = codex_dir.join(CODEX_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=codex\n# HERDR_INTEGRATION_VERSION=2\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=codex\n# MASTR_INTEGRATION_VERSION=2\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -1724,7 +1724,7 @@ fn copilot_v1_integration_status_is_outdated() {
     let hook_path = copilot_hooks_dir.join(COPILOT_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=copilot\n# HERDR_INTEGRATION_VERSION=1\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=copilot\n# MASTR_INTEGRATION_VERSION=1\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2183,7 +2183,7 @@ fn droid_v1_integration_status_is_outdated() {
     let hook_path = droid_hooks_dir.join(DROID_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=droid\n# HERDR_INTEGRATION_VERSION=1\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=droid\n# MASTR_INTEGRATION_VERSION=1\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2704,7 +2704,7 @@ fn install_hermes_writes_plugin_and_enables_it() {
     );
     assert_eq!(manifest, HERMES_PLUGIN_MANIFEST_ASSET);
     assert_eq!(init, HERMES_PLUGIN_INIT_ASSET);
-    assert!(config.contains("plugins:\n  enabled:\n    - herdr-agent-state"));
+    assert!(config.contains("plugins:\n  enabled:\n    - mastr-agent-state"));
 
     std::env::remove_var("HOME");
     let _ = fs::remove_dir_all(base);
@@ -2719,7 +2719,7 @@ fn install_hermes_is_idempotent_for_enabled_entry() {
     fs::create_dir_all(&hermes_dir).unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins:\n  enabled:\n    - herdr-agent-state\n",
+        "plugins:\n  enabled:\n    - mastr-agent-state\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2728,7 +2728,7 @@ fn install_hermes_is_idempotent_for_enabled_entry() {
     install_hermes().unwrap();
 
     let config = fs::read_to_string(hermes_dir.join("config.yaml")).unwrap();
-    assert_eq!(config.matches("herdr-agent-state").count(), 1);
+    assert_eq!(config.matches("mastr-agent-state").count(), 1);
 
     std::env::remove_var("HOME");
     let _ = fs::remove_dir_all(base);
@@ -2753,7 +2753,7 @@ fn install_hermes_preserves_flat_plugin_list() {
     let config = fs::read_to_string(hermes_dir.join("config.yaml")).unwrap();
     assert_eq!(
         config,
-        "plugins:\n  - herdr-agent-state\n  - platforms/discord\n"
+        "plugins:\n  - mastr-agent-state\n  - platforms/discord\n"
     );
 
     std::env::remove_var("HOME");
@@ -2779,7 +2779,7 @@ fn install_hermes_converts_flow_plugin_list_to_block_list() {
     let config = fs::read_to_string(hermes_dir.join("config.yaml")).unwrap();
     assert_eq!(
         config,
-        "plugins:\n  - herdr-agent-state\n  - platforms/discord\n"
+        "plugins:\n  - mastr-agent-state\n  - platforms/discord\n"
     );
 
     std::env::remove_var("HOME");
@@ -2791,7 +2791,7 @@ fn install_hermes_converts_inline_enabled_list_to_block_list() {
     let config = update_hermes_enabled_plugin("plugins:\n  enabled: [example-plugin]\n", true);
     assert_eq!(
         config,
-        "plugins:\n  enabled:\n    - herdr-agent-state\n    - example-plugin\n"
+        "plugins:\n  enabled:\n    - mastr-agent-state\n    - example-plugin\n"
     );
 }
 
@@ -2801,7 +2801,7 @@ fn install_hermes_preserves_quoted_inline_enabled_items() {
         update_hermes_enabled_plugin("plugins:\n  enabled: [\"null\", 'foo: bar']\n", true);
     assert_eq!(
         config,
-        "plugins:\n  enabled:\n    - herdr-agent-state\n    - \"null\"\n    - 'foo: bar'\n"
+        "plugins:\n  enabled:\n    - mastr-agent-state\n    - \"null\"\n    - 'foo: bar'\n"
     );
 }
 
@@ -2813,7 +2813,7 @@ fn install_hermes_preserves_inline_enabled_comment() {
     );
     assert_eq!(
         config,
-        "plugins:\n  enabled: # managed locally\n    - herdr-agent-state\n    - example-plugin\n"
+        "plugins:\n  enabled: # managed locally\n    - mastr-agent-state\n    - example-plugin\n"
     );
 }
 
@@ -2823,19 +2823,19 @@ fn install_hermes_preserves_inline_plugins_comment() {
         update_hermes_enabled_plugin("plugins: [platforms/discord] # managed locally\n", true);
     assert_eq!(
         config,
-        "plugins: # managed locally\n  - herdr-agent-state\n  - platforms/discord\n"
+        "plugins: # managed locally\n  - mastr-agent-state\n  - platforms/discord\n"
     );
 }
 
 #[test]
 fn install_hermes_is_idempotent_for_inline_enabled_list_entry() {
     let config = update_hermes_enabled_plugin(
-        "plugins:\n  enabled: [herdr-agent-state, example-plugin]\n",
+        "plugins:\n  enabled: [mastr-agent-state, example-plugin]\n",
         true,
     );
     assert_eq!(
         config,
-        "plugins:\n  enabled: [herdr-agent-state, example-plugin]\n"
+        "plugins:\n  enabled: [mastr-agent-state, example-plugin]\n"
     );
 }
 
@@ -2848,7 +2848,7 @@ fn install_hermes_is_idempotent_for_quoted_flat_plugin_entry() {
     fs::create_dir_all(&hermes_dir).unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins:\n  - \"herdr-agent-state\" # installed by herdr\n",
+        "plugins:\n  - \"mastr-agent-state\" # installed by herdr\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2858,7 +2858,7 @@ fn install_hermes_is_idempotent_for_quoted_flat_plugin_entry() {
     let config = fs::read_to_string(hermes_dir.join("config.yaml")).unwrap();
     assert_eq!(
         config,
-        "plugins:\n  - \"herdr-agent-state\" # installed by herdr\n"
+        "plugins:\n  - \"mastr-agent-state\" # installed by herdr\n"
     );
 
     std::env::remove_var("HOME");
@@ -2880,7 +2880,7 @@ fn uninstall_hermes_removes_plugin_and_enabled_entry() {
     .unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins:\n  enabled:\n    - other-plugin\n    - herdr-agent-state\n",
+        "plugins:\n  enabled:\n    - other-plugin\n    - mastr-agent-state\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2892,7 +2892,7 @@ fn uninstall_hermes_removes_plugin_and_enabled_entry() {
     assert!(result.updated_config);
     assert!(!plugin_dir.exists());
     assert!(config.contains("    - other-plugin"));
-    assert!(!config.contains("herdr-agent-state"));
+    assert!(!config.contains("mastr-agent-state"));
 
     std::env::remove_var("HOME");
     let _ = fs::remove_dir_all(base);
@@ -2913,7 +2913,7 @@ fn uninstall_hermes_preserves_flat_plugin_list() {
     .unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins:\n  - other-plugin\n  - herdr-agent-state\n",
+        "plugins:\n  - other-plugin\n  - mastr-agent-state\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2944,7 +2944,7 @@ fn uninstall_hermes_removes_flow_plugin_list_entry() {
     .unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins: [other-plugin, herdr-agent-state]\n",
+        "plugins: [other-plugin, mastr-agent-state]\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -2963,7 +2963,7 @@ fn uninstall_hermes_removes_flow_plugin_list_entry() {
 #[test]
 fn uninstall_hermes_removes_inline_enabled_list_entry() {
     let config = update_hermes_enabled_plugin(
-        "plugins:\n  enabled: [example-plugin, herdr-agent-state]\n",
+        "plugins:\n  enabled: [example-plugin, mastr-agent-state]\n",
         false,
     );
     assert_eq!(config, "plugins:\n  enabled:\n    - example-plugin\n");
@@ -2972,7 +2972,7 @@ fn uninstall_hermes_removes_inline_enabled_list_entry() {
 #[test]
 fn uninstall_hermes_preserves_quoted_inline_enabled_items() {
     let config = update_hermes_enabled_plugin(
-        "plugins:\n  enabled: ['foo: bar', herdr-agent-state]\n",
+        "plugins:\n  enabled: ['foo: bar', mastr-agent-state]\n",
         false,
     );
     assert_eq!(config, "plugins:\n  enabled:\n    - 'foo: bar'\n");
@@ -2980,7 +2980,7 @@ fn uninstall_hermes_preserves_quoted_inline_enabled_items() {
 
 #[test]
 fn uninstall_hermes_converts_single_inline_enabled_entry_to_empty_list() {
-    let config = update_hermes_enabled_plugin("plugins:\n  enabled: [herdr-agent-state]\n", false);
+    let config = update_hermes_enabled_plugin("plugins:\n  enabled: [mastr-agent-state]\n", false);
     assert_eq!(config, "plugins:\n  enabled: []\n");
 }
 
@@ -2999,7 +2999,7 @@ fn uninstall_hermes_removes_commented_flat_plugin_entry() {
     .unwrap();
     fs::write(
         hermes_dir.join("config.yaml"),
-        "plugins:\n  - other-plugin\n  - herdr-agent-state # installed by herdr\n",
+        "plugins:\n  - other-plugin\n  - mastr-agent-state # installed by herdr\n",
     )
     .unwrap();
     std::env::set_var("HOME", &home);
@@ -3433,8 +3433,8 @@ fn install_qwen_writes_session_hook_and_preserves_settings() {
     assert!(command.ends_with("session"));
     assert!(settings.get("permissions").is_some());
     let hook_asset = fs::read_to_string(&installed.hook_path).unwrap();
-    assert!(hook_asset.contains("HERDR_INTEGRATION_ID=qwen"));
-    assert!(hook_asset.contains("HERDR_INTEGRATION_VERSION=1"));
+    assert!(hook_asset.contains("MASTR_INTEGRATION_ID=qwen"));
+    assert!(hook_asset.contains("MASTR_INTEGRATION_VERSION=1"));
     assert!(hook_asset.contains("herdr:qwen"));
 
     install_qwen().unwrap();
@@ -3591,10 +3591,10 @@ fn letta_session_hook_is_silent_and_encodes_default_conversation() {
     let mut child = Command::new("sh")
         .arg(&installed.hook_path)
         .arg("session")
-        .env("HERDR_ENV", "1")
-        .env("HERDR_PANE_ID", "w1:p2")
-        .env("HERDR_SOCKET_PATH", "/tmp/herdr.sock")
-        .env("HERDR_BIN_PATH", &fake_herdr)
+        .env("MASTR_ENV", "1")
+        .env("MASTR_PANE_ID", "w1:p2")
+        .env("MASTR_SOCKET_PATH", "/tmp/mastr.sock")
+        .env("MASTR_BIN_PATH", &fake_herdr)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -3820,7 +3820,7 @@ fn cursor_v1_integration_status_is_current() {
     let hook_path = cursor_dir.join(CURSOR_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=cursor\n# HERDR_INTEGRATION_VERSION=1\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=cursor\n# MASTR_INTEGRATION_VERSION=1\n",
     )
     .unwrap();
     std::env::set_var(CURSOR_CONFIG_DIR_ENV_VAR, &cursor_dir);
@@ -3957,7 +3957,7 @@ fn install_grok_writes_hook_and_config() {
     #[cfg(not(windows))]
     {
         assert!(command.starts_with("sh "));
-        assert!(command.contains("herdr-agent-state.sh"));
+        assert!(command.contains("mastr-agent-state.sh"));
         assert!(command.ends_with(" session"));
     }
 
@@ -4332,7 +4332,7 @@ fn antigravity_cli_v2_install_is_outdated_until_reinstalled() {
     fs::write(
         hook_dir.join(ANTIGRAVITY_CLI_HOOK_INSTALL_NAME),
         ANTIGRAVITY_CLI_HOOK_ASSET
-            .replace("HERDR_INTEGRATION_VERSION=3", "HERDR_INTEGRATION_VERSION=2"),
+            .replace("MASTR_INTEGRATION_VERSION=3", "MASTR_INTEGRATION_VERSION=2"),
     )
     .unwrap();
     std::env::set_var(ANTIGRAVITY_CLI_CONFIG_DIR_ENV_VAR, &agy_dir);
@@ -4427,7 +4427,7 @@ fn grok_v1_integration_status_is_outdated() {
     let hook_path = hooks_dir.join(GROK_HOOK_INSTALL_NAME);
     fs::write(
         &hook_path,
-        "#!/bin/sh\n# HERDR_INTEGRATION_ID=grok\n# HERDR_INTEGRATION_VERSION=1\n",
+        "#!/bin/sh\n# MASTR_INTEGRATION_ID=grok\n# MASTR_INTEGRATION_VERSION=1\n",
     )
     .unwrap();
     fs::write(
@@ -4509,7 +4509,7 @@ fn grok_status_reports_outdated_when_hook_config_missing_or_broken() {
     // nonfunctional, so neither may report current.
     fs::write(
         &config_path,
-        r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo herdr-agent-state.sh"}]}]}}"#,
+        r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo mastr-agent-state.sh"}]}]}}"#,
     )
     .unwrap();
     assert_eq!(grok_state(), IntegrationStatusKind::Outdated);
@@ -4624,4 +4624,19 @@ fn grok_dir_honors_grok_home_after_config_dir_seam() {
     std::env::remove_var(GROK_HOME_ENV_VAR);
     clear_integration_path_env();
     let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn mastr_panes_do_not_activate_parent_herdr_hooks() {
+    let mut cmd = portable_pty::CommandBuilder::new("sh");
+    cmd.env("HERDR_ENV", "1");
+    cmd.env("HERDR_SOCKET_PATH", "/parent/herdr.sock");
+    cmd.env("HERDR_PANE_ID", "parent-pane");
+    cmd.env("MASTR_ENV", "1");
+    super::env::apply_pane_base_env(&mut cmd);
+    assert!(cmd.get_env("HERDR_ENV").is_none());
+    assert!(cmd.get_env("HERDR_SOCKET_PATH").is_none());
+    assert!(cmd.get_env("HERDR_PANE_ID").is_none());
+    assert_eq!(cmd.get_env("MASTR_ENV"), Some(std::ffi::OsStr::new("1")));
+    assert!(cmd.get_env("MASTR_SOCKET_PATH").is_some());
 }

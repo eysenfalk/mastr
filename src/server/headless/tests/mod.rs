@@ -4378,7 +4378,7 @@ fn terminal_attach_client_exits_when_worktree_remove_succeeds() {
     let mut workspace = crate::workspace::Workspace::test_new("worktree");
     workspace.worktree_space = Some(crate::workspace::WorktreeSpaceMembership {
         key: "repo-key".into(),
-        label: "herdr".into(),
+        label: "mastr".into(),
         repo_root: "/repo/herdr".into(),
         checkout_path: checkout.clone(),
         is_linked_worktree: true,

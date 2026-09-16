@@ -106,22 +106,22 @@ fn windows_virtual_terminal_input_mode_sets_only_vti_bit() {
 fn windows_win32_input_mode_defaults_to_vt_and_honors_probe() {
     let _guard = env_lock().lock().unwrap();
     let _removed =
-        EnvVarsRemovedGuard::new(&["HERDR_WINDOWS_INPUT_PROBE", "SSH_CONNECTION", "SSH_TTY"]);
+        EnvVarsRemovedGuard::new(&["MASTR_WINDOWS_INPUT_PROBE", "SSH_CONNECTION", "SSH_TTY"]);
 
     assert!(!windows_win32_input_mode_enabled());
     {
         let _ssh = EnvVarGuard::set("SSH_CONNECTION", "1 2 3 4");
         assert!(!windows_win32_input_mode_enabled());
-        let _probe = EnvVarGuard::set("HERDR_WINDOWS_INPUT_PROBE", "WiN32");
+        let _probe = EnvVarGuard::set("MASTR_WINDOWS_INPUT_PROBE", "WiN32");
         assert!(windows_win32_input_mode_enabled());
     }
     {
         let _ssh = EnvVarGuard::set("SSH_TTY", "terminal");
         assert!(!windows_win32_input_mode_enabled());
-        let _probe = EnvVarGuard::set("HERDR_WINDOWS_INPUT_PROBE", "vT");
+        let _probe = EnvVarGuard::set("MASTR_WINDOWS_INPUT_PROBE", "vT");
         assert!(!windows_win32_input_mode_enabled());
     }
-    let _probe = EnvVarGuard::set("HERDR_WINDOWS_INPUT_PROBE", "win32");
+    let _probe = EnvVarGuard::set("MASTR_WINDOWS_INPUT_PROBE", "win32");
     assert!(windows_win32_input_mode_enabled());
 }
 
@@ -572,7 +572,7 @@ fn client_error_display_detached_default_session_reattach_hint() {
     };
     let msg = err.to_string();
     assert!(
-        msg.contains("Run `herdr` to reattach"),
+        msg.contains("Run `mastr` to reattach"),
         "should suggest default reattach command: {msg}"
     );
 }
@@ -587,7 +587,7 @@ fn client_error_display_detached_named_session_reattach_hint() {
     };
     let msg = err.to_string();
     assert!(
-        msg.contains("Run `herdr session attach work` to reattach"),
+        msg.contains("Run `mastr session attach work` to reattach"),
         "should suggest named session reattach command: {msg}"
     );
 }

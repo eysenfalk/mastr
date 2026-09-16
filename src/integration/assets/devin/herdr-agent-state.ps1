@@ -1,14 +1,14 @@
 # installed by herdr
 # managed by herdr; reinstalling or updating the integration overwrites this file.
 # add custom hooks beside this file instead of editing it.
-# HERDR_INTEGRATION_ID=devin
-# HERDR_INTEGRATION_VERSION=2
+# MASTR_INTEGRATION_ID=devin
+# MASTR_INTEGRATION_VERSION=2
 
 param([string]$Action = "")
 
 if ($Action -ne "session") { exit 0 }
-if ($env:HERDR_ENV -ne "1") { exit 0 }
-if ([string]::IsNullOrWhiteSpace($env:HERDR_PANE_ID)) { exit 0 }
+if ($env:MASTR_ENV -ne "1") { exit 0 }
+if ([string]::IsNullOrWhiteSpace($env:MASTR_PANE_ID)) { exit 0 }
 
 $inputText = [Console]::In.ReadToEnd()
 try {
@@ -44,8 +44,8 @@ if ([string]::IsNullOrWhiteSpace($sessionId) -and $allowFallback) {
 if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
 
 $seq = [DateTime]::UtcNow.Ticks
-$herdr = if ([string]::IsNullOrWhiteSpace($env:HERDR_BIN_PATH)) { "herdr" } else { $env:HERDR_BIN_PATH }
+$herdr = if ([string]::IsNullOrWhiteSpace($env:MASTR_BIN_PATH)) { "mastr" } else { $env:MASTR_BIN_PATH }
 try {
-    & $herdr pane report-agent-session $env:HERDR_PANE_ID --source herdr:devin --agent devin --seq $seq --agent-session-id $sessionId 2>$null | Out-Null
+    & $herdr pane report-agent-session $env:MASTR_PANE_ID --source herdr:devin --agent devin --seq $seq --agent-session-id $sessionId 2>$null | Out-Null
 } catch {
 }

@@ -224,7 +224,7 @@ fn server_live_handoff(args: &[String]) -> std::io::Result<i32> {
     eprintln!(
         "live handoff complete; server log: {}",
         crate::session::data_dir()
-            .join("herdr-server.log")
+            .join("mastr-server.log")
             .display()
     );
     Ok(0)

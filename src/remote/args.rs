@@ -1,5 +1,5 @@
-pub(crate) const REATTACH_COMMAND_ENV_VAR: &str = "HERDR_REATTACH_COMMAND";
-pub(crate) const REMOTE_KEYBINDINGS_ENV_VAR: &str = "HERDR_REMOTE_KEYBINDINGS";
+pub(crate) const REATTACH_COMMAND_ENV_VAR: &str = "MASTR_REATTACH_COMMAND";
+pub(crate) const REMOTE_KEYBINDINGS_ENV_VAR: &str = "MASTR_REMOTE_KEYBINDINGS";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RemoteKeybindings {

@@ -45,10 +45,10 @@ fn startup_command(socket_path: &Path) -> String {
     if socket_path == session_socket {
         crate::session::local_attach_command()
     } else {
-        // A socket override wins over an inherited HERDR_SESSION. Keep the
+        // A socket override wins over an inherited MASTR_SESSION. Keep the
         // command in the current environment so it starts the overridden
         // target instead of directing the user to an unrelated session.
-        "herdr".to_string()
+        "mastr".to_string()
     }
 }
 

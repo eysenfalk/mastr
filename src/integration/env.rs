@@ -5,9 +5,9 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use portable_pty::CommandBuilder;
 
-pub(crate) const HERDR_PANE_ID_ENV_VAR: &str = "HERDR_PANE_ID";
-pub(crate) const HERDR_TAB_ID_ENV_VAR: &str = "HERDR_TAB_ID";
-pub(crate) const HERDR_WORKSPACE_ID_ENV_VAR: &str = "HERDR_WORKSPACE_ID";
+pub(crate) const MASTR_PANE_ID_ENV_VAR: &str = "MASTR_PANE_ID";
+pub(crate) const MASTR_TAB_ID_ENV_VAR: &str = "MASTR_TAB_ID";
+pub(crate) const MASTR_WORKSPACE_ID_ENV_VAR: &str = "MASTR_WORKSPACE_ID";
 
 pub(crate) const PI_CODING_AGENT_DIR_ENV_VAR: &str = "PI_CODING_AGENT_DIR";
 pub(crate) const OMP_CONFIG_DIR_ENV_VAR: &str = "PI_CONFIG_DIR";
@@ -26,9 +26,22 @@ pub(crate) const GROK_HOME_ENV_VAR: &str = "GROK_HOME";
 pub(crate) const HERMES_HOME_ENV_VAR: &str = "HERMES_HOME";
 
 pub(crate) fn apply_pane_base_env(cmd: &mut CommandBuilder) {
+    // Mastr may be launched inside Herdr. Do not let the parent's installed
+    // hooks report Mastr pane events back to the parent Herdr session.
+    for key in [
+        "HERDR_ENV",
+        "HERDR_SOCKET_PATH",
+        "HERDR_CLIENT_SOCKET_PATH",
+        "HERDR_BIN_PATH",
+        "HERDR_PANE_ID",
+        "HERDR_TAB_ID",
+        "HERDR_WORKSPACE_ID",
+    ] {
+        cmd.env_remove(key);
+    }
     cmd.env(crate::api::SOCKET_PATH_ENV_VAR, crate::api::socket_path());
     if let Ok(executable) = crate::platform::launch_executable() {
-        cmd.env("HERDR_BIN_PATH", executable);
+        cmd.env("MASTR_BIN_PATH", executable);
     }
 }
 

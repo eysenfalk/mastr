@@ -252,7 +252,7 @@ fn plugin_link_list_unlink_cli_smoke_test() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("herdr.sock");
+    let socket_path = runtime_dir.join("mastr.sock");
     let plugin_dir = base.join("plugins").join("layout");
     fs::create_dir_all(&plugin_dir).unwrap();
     fs::write(
@@ -358,7 +358,7 @@ command = ["sh", "-c", "sleep 5"]
             "--entrypoint",
             "board",
             "--env",
-            "HERDR_ROLE=board",
+            "MASTR_ROLE=board",
             "--no-focus",
         ],
     );
@@ -406,7 +406,7 @@ min_herdr_version = "0.6.10"
 platforms = ["linux", "macos", "windows"]
 
 [[build]]
-command = ["sh", "-c", "echo built > built.txt; if [ -n \"$HERDR_SESSION\" ]; then echo \"$HERDR_SESSION\" > leaked-session.txt; fi"]
+command = ["sh", "-c", "echo built > built.txt; if [ -n \"$MASTR_SESSION\" ]; then echo \"$MASTR_SESSION\" > leaked-session.txt; fi"]
 
 [[actions]]
 id = "bootstrap"
@@ -446,7 +446,7 @@ command = ["sh", "-c", "echo bootstrap"]
         ],
         &[
             ("GIT_CONFIG_GLOBAL", &git_config),
-            ("HERDR_SESSION", Path::new("leaked-session")),
+            ("MASTR_SESSION", Path::new("leaked-session")),
         ],
     );
     assert!(
@@ -483,7 +483,7 @@ command = ["sh", "-c", "echo bootstrap"]
             .join("worktree-bootstrap")
             .join("leaked-session.txt")
             .exists(),
-        "build command should not inherit HERDR_SESSION"
+        "build command should not inherit MASTR_SESSION"
     );
 
     let uninstall = run_named_cli(
@@ -810,7 +810,7 @@ fn plugin_install_restores_previous_checkout_when_registration_fails() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("fake-herdr.sock");
+    let socket_path = runtime_dir.join("fake-mastr.sock");
     let source_repo = base.join("source-repo");
     let plugin_dir = source_repo.join("worktree-bootstrap");
     fs::create_dir_all(&plugin_dir).unwrap();
@@ -840,7 +840,7 @@ command = ["sh", "-c", "echo new"]
     fs::create_dir_all(&config_home).unwrap();
     fs::create_dir_all(&runtime_dir).unwrap();
     let managed_checkout = config_home
-        .join("herdr-dev")
+        .join("mastr-dev")
         .join("plugins")
         .join("github")
         .join(WORKTREE_BOOTSTRAP_MANAGED_COMPONENT);
@@ -936,7 +936,7 @@ fn plugin_install_rejects_server_that_drops_source_metadata() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("fake-herdr.sock");
+    let socket_path = runtime_dir.join("fake-mastr.sock");
     let source_repo = base.join("source-repo");
     let plugin_dir = source_repo.join("worktree-bootstrap");
     fs::create_dir_all(&plugin_dir).unwrap();
@@ -966,7 +966,7 @@ command = ["sh", "-c", "echo install"]
     fs::create_dir_all(&config_home).unwrap();
     fs::create_dir_all(&runtime_dir).unwrap();
     let managed_checkout = config_home
-        .join("herdr-dev")
+        .join("mastr-dev")
         .join("plugins")
         .join("github")
         .join(WORKTREE_BOOTSTRAP_MANAGED_COMPONENT);
@@ -1064,7 +1064,7 @@ fn plugin_install_keeps_checkout_when_incompatible_server_cleanup_fails() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = runtime_dir.join("fake-herdr.sock");
+    let socket_path = runtime_dir.join("fake-mastr.sock");
     let source_repo = base.join("source-repo");
     let plugin_dir = source_repo.join("worktree-bootstrap");
     fs::create_dir_all(&plugin_dir).unwrap();
@@ -1094,7 +1094,7 @@ command = ["sh", "-c", "echo install"]
     fs::create_dir_all(&config_home).unwrap();
     fs::create_dir_all(&runtime_dir).unwrap();
     let managed_checkout = config_home
-        .join("herdr-dev")
+        .join("mastr-dev")
         .join("plugins")
         .join("github")
         .join(WORKTREE_BOOTSTRAP_MANAGED_COMPONENT);

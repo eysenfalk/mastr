@@ -53,9 +53,9 @@ impl Harness {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         let app = if cfg!(debug_assertions) {
-            "herdr-dev"
+            "mastr-dev"
         } else {
-            "herdr"
+            "mastr"
         };
         let state = root.join("state").join(app).join("client");
         let session = root.join("config").join(app).join("sessions/fleet");
@@ -64,16 +64,16 @@ impl Harness {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::write(root.join("bin/ssh"), SSH).unwrap();
         fs::set_permissions(root.join("bin/ssh"), fs::Permissions::from_mode(0o700)).unwrap();
-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_herdr"), root.join("remote herdr")).unwrap();
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_mastr"), root.join("remote herdr")).unwrap();
         fs::write(state.join("endpoints.json"), serde_json::to_vec(&json!({
             "version": 1,
             "ssh": [{"id": PROFILE_ID, "label": "mac", "target": "fake-mac", "session": "fleet", "enabled": true}]
         })).unwrap()).unwrap();
-        let remote = UnixListener::bind(session.join("herdr.sock")).unwrap();
+        let remote = UnixListener::bind(session.join("mastr.sock")).unwrap();
         remote.set_nonblocking(true).unwrap();
         let local = UnixListener::bind(root.join("local.sock")).unwrap();
         local.set_nonblocking(true).unwrap();
-        let status = Command::new(env!("CARGO_BIN_EXE_herdr"))
+        let status = Command::new(env!("CARGO_BIN_EXE_mastr"))
             .args(["status", "client", "--json"])
             .output()
             .unwrap();
@@ -87,7 +87,7 @@ impl Harness {
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_herdr"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_mastr"));
         command
             .args(args)
             .env(
@@ -100,15 +100,15 @@ impl Harness {
             .env("XDG_RUNTIME_DIR", &self.root)
             .env("TEST_ROOT", &self.root)
             .env("TEST_REMOTE_HERDR", self.root.join("remote herdr"))
-            .env("HERDR_SOCKET_PATH", self.root.join("local.sock"))
+            .env("MASTR_SOCKET_PATH", self.root.join("local.sock"))
             .env(
-                "HERDR_CLIENT_SOCKET_PATH",
+                "MASTR_CLIENT_SOCKET_PATH",
                 self.root.join("never-client.sock"),
             )
-            .env("HERDR_SESSION", "wrong-inherited-session")
-            .env("HERDR_PANE_ID", "wrong-local-pane")
-            .env_remove("HERDR_CONFIG_PATH")
-            .env_remove("HERDR_REMOTE_BINARY");
+            .env("MASTR_SESSION", "wrong-inherited-session")
+            .env("MASTR_PANE_ID", "wrong-local-pane")
+            .env_remove("MASTR_CONFIG_PATH")
+            .env_remove("MASTR_REMOTE_BINARY");
         command
     }
 
@@ -164,7 +164,7 @@ impl Harness {
             .unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with("herdr-api-")));
+            .starts_with("mastr-api-")));
     }
 }
 
@@ -370,7 +370,7 @@ fn machine_api_server_stop_is_sent_only_to_the_selected_machine() {
     let server = harness.serve(json!({"result":{"type":"ok"}}), harness.protocol);
     let output = harness
         .command(&["--machine", "mac", "server", "stop"])
-        .env("HERDR_SOCKET_PATH", harness.root.join("missing-local.sock"))
+        .env("MASTR_SOCKET_PATH", harness.root.join("missing-local.sock"))
         .output()
         .unwrap();
     assert!(
@@ -399,6 +399,6 @@ fn machine_api_protocol_mismatch_never_sends_the_mutation() {
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains("protocol_mismatch"), "{error}");
     assert!(error.contains("machine 'mac'"), "{error}");
-    assert!(!error.contains("HERDR_SOCKET_PATH="), "{error}");
+    assert!(!error.contains("MASTR_SOCKET_PATH="), "{error}");
     harness.assert_local_untouched();
 }
